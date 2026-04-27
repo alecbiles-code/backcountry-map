@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <meta name="theme-color" content="#0a0c12" />
-<title>Backcountry — Self-hosted GPX & terrain map</title>
+<title>Alec's Backcountry map</title>
 
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1073,6 +1073,39 @@
     font-size: 10px; margin-right: 5px; opacity: 0.7;
     filter: hue-rotate(0deg);
   }
+  /* Grouped tracks: subtle marker so you know clicks on the map open a
+     per-feature popup, and the sidebar entry can't be styled per-feature. */
+  .track-item.grouped .track-item-color { cursor: default; }
+  .track-item.grouped .track-item-color:hover { width: 3px; }
+  .track-group-tag {
+    display: inline-block;
+    margin-right: 5px;
+    color: var(--accent);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    opacity: 0.8;
+  }
+
+  /* Cursor-following tooltip showing the hovered feature's name when you're
+     hovering over a grouped track (so you can pick the right one to click). */
+  .feat-tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: var(--bg-elevated);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    z-index: 100;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    display: none;
+    max-width: 220px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
 
   /* === DROP-PIN TOOL === */
   .map-ctrl.active {
@@ -1267,8 +1300,8 @@
       <div class="brand">
         <div class="brand-mark"></div>
         <div>
-          <div>BACKCOUNTRY</div>
-          <div class="brand-meta">v1.0 · self-hosted</div>
+          <div>ALEC'S</div>
+          <div class="brand-meta">backcountry map</div>
         </div>
       </div>
     </div>
@@ -2752,19 +2785,19 @@ async function loadGPXFile(file) {
   return loadGPXText(text, file.name.replace(/\.gpx$/i, ''), file.name);
 }
 
-async function loadGPXFromURL(url, displayName) {
+async function loadGPXFromURL(url, displayName, options = {}) {
   try {
     const r = await fetch(url);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const text = await r.text();
-    return loadGPXText(text, displayName || url.split('/').pop().replace(/\.gpx$/i, ''), url);
+    return loadGPXText(text, displayName || url.split('/').pop().replace(/\.gpx$/i, ''), url, options);
   } catch (e) {
     toast(`Failed to load ${displayName || url}: ${e.message}`, 'error');
     return null;
   }
 }
 
-function loadGPXText(text, defaultName, source) {
+function loadGPXText(text, defaultName, source, options = {}) {
   let dom;
   try {
     dom = new DOMParser().parseFromString(text, 'application/xml');
@@ -2779,9 +2812,6 @@ function loadGPXText(text, defaultName, source) {
     return null;
   }
 
-  // Split each <trk> / <rte> into its own sidebar entry. Waypoints get
-  // collected into a single companion "<file> waypoints" entry per file
-  // (otherwise a file with 100 POIs would dump 100 sidebar rows).
   const fileBase = defaultName || 'gpx';
   const lineFeatures = [];
   const wptFeatures = [];
@@ -2792,10 +2822,74 @@ function loadGPXText(text, defaultName, source) {
       wptFeatures.push(f);
     }
   }
+  // Pre-classify all waypoints regardless of branch — popups need this everywhere.
+  for (const f of wptFeatures) {
+    f.properties = f.properties || {};
+    f.properties._kind = classifyWaypoint(f.properties);
+  }
 
+  // ----- GROUPED MODE -----
+  // If options.grouped is true (typically set in manifest.json for files with
+  // many named features like a peak collection), produce a SINGLE sidebar
+  // entry containing every line/point feature. The map still renders each
+  // feature individually so clicks can show that feature's own name.
+  if (options.grouped) {
+    const allCoords = [];
+    let totalDist = 0, totalGain = 0, totalLoss = 0;
+    let maxEle = 0, minEle = Infinity;
+    let wptCount = 0;
+    for (const f of lineFeatures) {
+      const coords = [];
+      if (f.geometry.type === 'LineString') {
+        for (const c of f.geometry.coordinates) { coords.push(c); allCoords.push(c); }
+      } else {
+        for (const line of f.geometry.coordinates)
+          for (const c of line) { coords.push(c); allCoords.push(c); }
+      }
+      // Per-feature stats sum to a group total. Each feature is computed
+      // independently so the group total isn't artificially inflated by
+      // jumps between unrelated tracks.
+      const s = calcStats(coords);
+      totalDist += s.distance;
+      totalGain += s.gain;
+      totalLoss += s.loss;
+      if (s.maxEle > maxEle) maxEle = s.maxEle;
+      if (s.minEle && s.minEle < minEle) minEle = s.minEle;
+      // Stash per-feature stats on the feature properties for click popups
+      f.properties = f.properties || {};
+      f.properties._stats = s;
+    }
+    for (const f of wptFeatures) {
+      wptCount += f.geometry.type === 'MultiPoint' ? f.geometry.coordinates.length : 1;
+    }
+    const t = {
+      id: 'trk-' + uid(),
+      name: fileBase,
+      color: nextTrackColor(),
+      geojson: fc,
+      stats: {
+        distance: totalDist, gain: totalGain, loss: totalLoss,
+        maxEle, minEle: minEle === Infinity ? 0 : minEle,
+        wptCount, lineCount: lineFeatures.length,
+      },
+      source,
+      allCoords,
+      grouped: true,                  // sidebar UI is simplified for grouped
+      featureCount: lineFeatures.length + wptCount,
+    };
+    S.tracks.set(t.id, t);
+    renderTrackOnMap(t);
+    buildTracksUI();
+    Store.saveTracks();
+    fitTrack(t);
+    return t;
+  }
+
+  // ----- SPLIT MODE (default) -----
+  // Each <trk> / <rte> gets its own sidebar entry, waypoints get one combined
+  // entry per file.
   const created = [];
 
-  // One track per line feature. Each gets its own GeoJSON, color, stats.
   for (let i = 0; i < lineFeatures.length; i++) {
     const f = lineFeatures[i];
     const featName = (f.properties && f.properties.name)
@@ -2825,13 +2919,10 @@ function loadGPXText(text, defaultName, source) {
     created.push(t);
   }
 
-  // Single combined waypoints entry if the file has any. Classification runs
-  // once per waypoint here so popup/styling logic downstream doesn't have to.
+  // Single combined waypoints entry if the file has any.
   if (wptFeatures.length) {
     let wptCount = 0;
     for (const f of wptFeatures) {
-      f.properties = f.properties || {};
-      f.properties._kind = classifyWaypoint(f.properties);
       wptCount += f.geometry.type === 'MultiPoint' ? f.geometry.coordinates.length : 1;
     }
     const wptName = lineFeatures.length === 0 ? fileBase : `${fileBase} — waypoints`;
@@ -2839,7 +2930,7 @@ function loadGPXText(text, defaultName, source) {
     const t = {
       id: 'trk-' + uid(),
       name: wptName,
-      color: '#FFD93D', // distinct yellow so waypoint groups stand out in the sidebar
+      color: '#FFD93D',
       geojson: { type: 'FeatureCollection', features: wptFeatures },
       stats,
       source,
@@ -2855,12 +2946,7 @@ function loadGPXText(text, defaultName, source) {
   buildTracksUI();
   Store.saveTracks();
   if (created.length) {
-    // Fit to all created features from this file together
     fitTracks(created);
-  }
-  // Return the first track for backward compat with single-track callers
-  // (we attach the full list via .siblings so manifest loader can pin all).
-  if (created.length) {
     created[0].siblings = created;
   }
   return created[0] || null;
@@ -3071,8 +3157,10 @@ function renderTrackOnMap(track) {
         .setLngLat(e.lngLat)
         .setHTML(html)
         .addTo(S.map);
-      // Selecting parent track makes the elevation profile pop up too if it's a route+wpt file
-      selectTrack(track.id);
+      // Selecting parent track makes the elevation profile pop up too if it's
+      // a route+wpt file. Skip for grouped tracks since one elevation series
+      // wouldn't be meaningful for many independent features.
+      if (!track.grouped) selectTrack(track.id);
     });
     S.map.on('mouseenter', wptId, () => S.map.getCanvas().style.cursor = 'pointer');
     S.map.on('mouseleave', wptId, () => S.map.getCanvas().style.cursor = '');
@@ -3122,13 +3210,83 @@ function renderTrackOnMap(track) {
 
   track.layerIds = [glowId, lineId, startId, endId, wptId, wptLabelId];
 
-  // Click on a line → popup with track stats
+  // Click on a line → popup. For grouped tracks (manifest entries with
+  // grouped:true) we show the clicked feature's individual name and per-
+  // feature stats, since one sidebar entry stands in for many features.
   S.map.on('click', lineId, (e) => {
-    selectTrack(track.id);
-    showTrackPopup(track, e.lngLat);
+    if (track.grouped) {
+      const f = e.features && e.features[0];
+      showFeaturePopup(track, f, e.lngLat);
+    } else {
+      selectTrack(track.id);
+      showTrackPopup(track, e.lngLat);
+    }
   });
   S.map.on('mouseenter', lineId, () => S.map.getCanvas().style.cursor = 'pointer');
   S.map.on('mouseleave', lineId, () => S.map.getCanvas().style.cursor = '');
+
+  // Grouped tracks: highlight the hovered feature so the user can tell
+  // which one of the dozens they're about to click.
+  if (track.grouped) {
+    let hoverId = null;
+    S.map.on('mousemove', lineId, (e) => {
+      const f = e.features && e.features[0];
+      if (!f) return;
+      const id = f.id != null ? f.id : (f.properties && f.properties.name);
+      if (hoverId === id) return;
+      hoverId = id;
+      // Toggle a feature-state for highlighting via paint property
+      const name = (f.properties && f.properties.name) || '';
+      // Use a label tooltip via the cursor-following div for the hovered feature
+      showFeatureTooltip(name, e.lngLat);
+    });
+    S.map.on('mouseleave', lineId, () => { hoverId = null; hideFeatureTooltip(); });
+  }
+}
+
+// ----- Per-feature tooltip + popup helpers (for grouped tracks) -----
+function showFeatureTooltip(name, lngLat) {
+  if (!name) { hideFeatureTooltip(); return; }
+  let el = document.getElementById('feat-tooltip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'feat-tooltip';
+    el.className = 'feat-tooltip';
+    document.body.appendChild(el);
+  }
+  el.textContent = name;
+  el.style.display = 'block';
+  // Position near cursor — convert lngLat to pixel coords
+  const p = S.map.project(lngLat);
+  const rect = S.map.getContainer().getBoundingClientRect();
+  el.style.left = (rect.left + p.x + 12) + 'px';
+  el.style.top = (rect.top + p.y + 12) + 'px';
+}
+function hideFeatureTooltip() {
+  const el = document.getElementById('feat-tooltip');
+  if (el) el.style.display = 'none';
+}
+
+function showFeaturePopup(track, feature, lngLat) {
+  const p = (feature && feature.properties) || {};
+  const name = p.name || track.name;
+  const s = p._stats;
+  const lines = [];
+  if (s) {
+    if (s.distance > 0) lines.push(`<span class="lbl">Distance</span><span>${fmt.dist(s.distance)} mi</span>`);
+    if (s.gain > 0)     lines.push(`<span class="lbl">Gain</span><span>${fmt.ele(s.gain)} ft</span>`);
+    if (s.loss > 0)     lines.push(`<span class="lbl">Loss</span><span>${fmt.ele(s.loss)} ft</span>`);
+    if (s.maxEle)       lines.push(`<span class="lbl">Max ele</span><span>${fmt.ele(s.maxEle)} ft</span>`);
+  }
+  const desc = p.desc || p.cmt;
+  const html = `
+    <div class="track-popup-name" style="color:${track.color}">${escapeHtml(name)}</div>
+    ${desc ? `<div class="wpt-desc">${escapeHtml(String(desc).slice(0, 240))}${String(desc).length > 240 ? '…' : ''}</div>` : ''}
+    ${lines.length ? `<div class="track-popup-stats">${lines.join('')}</div>` : ''}
+    <div class="fed-popup-agency">in ${escapeHtml(track.name)}</div>
+  `;
+  new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: '280px' })
+    .setLngLat(lngLat).setHTML(html).addTo(S.map);
 }
 
 function startEndCoords(track) {
@@ -3248,7 +3406,7 @@ function buildTracksUI() {
   }
   for (const t of S.tracks.values()) {
     const el = document.createElement('div');
-    el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '') + (t.visible === false ? ' hidden' : '');
+    el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '') + (t.visible === false ? ' hidden' : '') + (t.grouped ? ' grouped' : '');
     const wpts = t.stats.wptCount || 0;
     const wptStat = wpts > 0
       ? `<div class="track-item-stat"><span class="label">⊙</span>${wpts}<span class="label">${wpts === 1 ? 'pt' : 'pts'}</span></div>`
@@ -3259,40 +3417,60 @@ function buildTracksUI() {
       ? `<div class="track-item-stat"><span class="label">↑</span>${fmt.ele(t.stats.gain)}<span class="label">ft</span></div>` : '';
     const maxStat = (t.stats.maxEle || 0) > 0
       ? `<div class="track-item-stat"><span class="label">MAX</span>${fmt.ele(t.stats.maxEle)}<span class="label">ft</span></div>` : '';
+    const featStat = t.grouped
+      ? `<div class="track-item-stat"><span class="label">FEATURES</span>${t.stats.lineCount + (t.stats.wptCount || 0)}</div>` : '';
     const pinTag = t.pinned ? '<span class="track-pin" title="Library track — managed via manifest.json">📌</span>' : '';
+    const groupTag = t.grouped ? '<span class="track-group-tag" title="Grouped: many features in one entry. Click features on the map for individual names.">⊞</span>' : '';
     const deleteBtn = t.pinned ? '' : '<button class="track-act danger" data-act="delete" title="Remove">×</button>';
     const visible = t.visible !== false;
     const eyeIcon = visible
       ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
       : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
     const lineWidth = t.lineWidth || 3;
-    el.innerHTML = `
-      <div class="track-item-color" data-act="color-pick" title="Change color" style="background:${t.color}"></div>
-      <div class="track-item-name">${pinTag}${escapeHtml(t.name)}</div>
-      <div class="track-item-stats">${distStat}${gainStat}${maxStat}${wptStat}</div>
-      <div class="track-item-actions">
-        <button class="track-act" data-act="settings" title="Style">⚙</button>
-        <button class="track-act" data-act="visibility" title="Show/hide">${eyeIcon}</button>
-        <button class="track-act" data-act="fit" title="Fit to view">⤢</button>
-        ${deleteBtn}
-      </div>
-      <div class="track-settings" data-track="${t.id}" hidden>
-        <div class="track-setting-row">
-          <label>Color</label>
-          <div class="color-palette">
-            ${CFG.trackColors.map(c => `<button class="color-swatch ${c === t.color ? 'active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+
+    // Grouped tracks (manifest entries with grouped:true) get a stripped-down
+    // sidebar UI: just visibility and fit. No styling panel, no color picker —
+    // those are kept for files where you actually want per-feature control.
+    if (t.grouped) {
+      el.innerHTML = `
+        <div class="track-item-color" style="background:${t.color}"></div>
+        <div class="track-item-name">${pinTag}${groupTag}${escapeHtml(t.name)}</div>
+        <div class="track-item-stats">${distStat}${gainStat}${maxStat}${featStat}</div>
+        <div class="track-item-actions">
+          <button class="track-act" data-act="visibility" title="Show/hide">${eyeIcon}</button>
+          <button class="track-act" data-act="fit" title="Fit to view">⤢</button>
+          ${deleteBtn}
+        </div>
+      `;
+    } else {
+      el.innerHTML = `
+        <div class="track-item-color" data-act="color-pick" title="Change color" style="background:${t.color}"></div>
+        <div class="track-item-name">${pinTag}${escapeHtml(t.name)}</div>
+        <div class="track-item-stats">${distStat}${gainStat}${maxStat}${wptStat}</div>
+        <div class="track-item-actions">
+          <button class="track-act" data-act="settings" title="Style">⚙</button>
+          <button class="track-act" data-act="visibility" title="Show/hide">${eyeIcon}</button>
+          <button class="track-act" data-act="fit" title="Fit to view">⤢</button>
+          ${deleteBtn}
+        </div>
+        <div class="track-settings" data-track="${t.id}" hidden>
+          <div class="track-setting-row">
+            <label>Color</label>
+            <div class="color-palette">
+              ${CFG.trackColors.map(c => `<button class="color-swatch ${c === t.color ? 'active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+            </div>
+          </div>
+          <div class="track-setting-row">
+            <label>Line width <span class="lw-val">${lineWidth}px</span></label>
+            <input type="range" class="lw-slider" min="1" max="8" step="0.5" value="${lineWidth}">
+          </div>
+          <div class="track-setting-row">
+            <label>Opacity <span class="op-val">${Math.round((t.opacity ?? 0.95) * 100)}%</span></label>
+            <input type="range" class="op-slider" min="0.2" max="1" step="0.05" value="${t.opacity ?? 0.95}">
           </div>
         </div>
-        <div class="track-setting-row">
-          <label>Line width <span class="lw-val">${lineWidth}px</span></label>
-          <input type="range" class="lw-slider" min="1" max="8" step="0.5" value="${lineWidth}">
-        </div>
-        <div class="track-setting-row">
-          <label>Opacity <span class="op-val">${Math.round((t.opacity ?? 0.95) * 100)}%</span></label>
-          <input type="range" class="op-slider" min="0.2" max="1" step="0.05" value="${t.opacity ?? 0.95}">
-        </div>
-      </div>
-    `;
+      `;
+    }
     el.addEventListener('click', (e) => {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'delete') {
@@ -3901,6 +4079,7 @@ async function tryManifest() {
     for (const entry of m.files) {
       const file = typeof entry === 'string' ? entry : entry.file;
       const name = typeof entry === 'string' ? null : entry.name;
+      const grouped = typeof entry === 'object' && entry.grouped === true;
       if (!file) continue;
       const url = `./gpx/${file}`;
       // Dedupe: if any tracks with this source URL are already loaded
@@ -3921,7 +4100,7 @@ async function tryManifest() {
         if (S.map.getSource(`track-${id}-wpt-src`)) S.map.removeSource(`track-${id}-wpt-src`);
         S.tracks.delete(id);
       }
-      const t = await loadGPXFromURL(url, name);
+      const t = await loadGPXFromURL(url, name, { grouped });
       if (t) {
         // A single GPX file can produce multiple sibling tracks now.
         // Pin them all and apply persisted style overrides (keyed by source URL,
