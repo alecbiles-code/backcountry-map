@@ -1,0 +1,13 @@
+{
+  "_comment": "Files listed here auto-load every time the map opens and are marked as 'library' tracks (📌 in the sidebar). They reload fresh from /gpx/ on each page open. Edit the GPX file and refresh to see updates. Library tracks aren't saved to localStorage and can't be deleted from the UI; remove the entry here to take one off the map. Each entry is either a plain filename string OR an object with {file, name}; the optional 'name' overrides the GPX <n> tag.",
+  "files": [
+    {
+      "file": "camping.gpx",
+      "name": "Camping"
+    },
+    {
+      "file": "PeaksAndRoutes.gpx",
+      "name": "Peaks & Routes"
+    }
+  ]
+}
