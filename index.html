@@ -222,7 +222,14 @@
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 3px;
+    cursor: pointer;
+    transition: width var(--t-fast);
   }
+  .track-item-color:hover { width: 6px; }
+  .track-item.hidden { opacity: 0.45; }
+  .track-item.hidden .track-item-name,
+  .track-item.hidden .track-item-stats { color: var(--text-muted); }
+  .track-item.expanded { padding-bottom: 4px; }
   .track-item-name {
     font-weight: 600;
     font-size: 13px;
@@ -250,7 +257,7 @@
     opacity: 0;
     transition: opacity var(--t-fast);
   }
-  .track-item:hover .track-item-actions, .track-item.active .track-item-actions { opacity: 1; }
+  .track-item:hover .track-item-actions, .track-item.active .track-item-actions, .track-item.expanded .track-item-actions { opacity: 1; }
   .track-act {
     width: 22px; height: 22px;
     border-radius: 5px;
@@ -259,9 +266,88 @@
     font-size: 11px;
     display: flex; align-items: center; justify-content: center;
     transition: all var(--t-fast);
+    border: none;
+    cursor: pointer;
   }
   .track-act:hover { background: rgba(0,0,0,0.7); color: var(--text); }
   .track-act.danger:hover { color: var(--danger); }
+  .track-act svg { display: block; }
+
+  /* Track style/settings panel */
+  .track-settings {
+    margin-top: 8px;
+    padding: 10px 8px 4px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .track-setting-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .track-setting-row label {
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+  .track-setting-row label .lw-val,
+  .track-setting-row label .op-val {
+    color: var(--text-dim);
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+  .color-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .color-swatch {
+    width: 18px; height: 18px;
+    border-radius: 4px;
+    border: 1.5px solid transparent;
+    cursor: pointer;
+    transition: all var(--t-fast);
+    padding: 0;
+  }
+  .color-swatch:hover { transform: scale(1.15); }
+  .color-swatch.active {
+    border-color: var(--text);
+    box-shadow: 0 0 0 2px var(--bg-elevated), 0 0 0 3px var(--accent);
+  }
+  .lw-slider, .op-slider {
+    width: 100%;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--border);
+    height: 4px;
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  .lw-slider::-webkit-slider-thumb, .op-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-elevated);
+    cursor: pointer;
+  }
+  .lw-slider::-moz-range-thumb, .op-slider::-moz-range-thumb {
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--bg-elevated);
+    cursor: pointer;
+  }
 
   .empty-state {
     padding: 24px 16px;
@@ -831,11 +917,25 @@
     width: 28px;
     background: linear-gradient(to right, #888 0%, #d6d690 25%, #e8a040 50%, #c45032 75%, #6e2418 100%);
   }
+  .legend-swatch.aspect-swatch {
+    width: 28px;
+    background: linear-gradient(90deg, #ff5c5c 0%, #ffd76b 33%, #5cd8ff 66%, #b67eff 100%);
+  }
+  .legend-swatch.snow-swatch {
+    width: 28px;
+    background: linear-gradient(to right, #ffffff 0%, #c5e3ff 30%, #80b4ff 60%, #1f4ec0 100%);
+  }
   .legend-sub {
     font-family: var(--font-mono);
     color: var(--text-muted);
     font-size: 9.5px;
     margin-left: 4px;
+  }
+  /* Federal land click-popup */
+  .fed-popup-name { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 2px; }
+  .fed-popup-agency {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em;
   }
 
   /* === DRAG OVERLAY === */
@@ -1309,6 +1409,32 @@ const CFG = {
       opacity: 0.55,
       attribution: 'USGS 3DEP',
     },
+    // Aspect: USGS 3DEP "Aspect Map" — N-facing slopes are blue, S-facing red, etc.
+    // For backcountry skiing this is hugely useful: N aspects hold powder, S aspects
+    // turn isothermal/wind-affected first, E aspects can have wind-loaded slabs.
+    aspect: {
+      kind: 'arcgis-image',
+      label: 'Aspect',
+      sub: 'USGS 3DEP, by direction',
+      color: '#56CCF2',
+      url: 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer',
+      renderingRule: { rasterFunction: 'Aspect Map' },
+      opacity: 0.5,
+      attribution: 'USGS 3DEP',
+    },
+    // Snow depth: NOAA NOHRSC daily snow analysis — "snow depth" in inches.
+    // Useful for trip planning, especially below treeline where satellite imagery
+    // may not show snow clearly. Updated daily.
+    snow: {
+      kind: 'arcgis-export',
+      label: 'Snow Depth',
+      sub: 'NOAA NOHRSC, inches',
+      color: '#80d8ff',
+      url: 'https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer',
+      layers: 'show:3',
+      opacity: 0.65,
+      attribution: 'NOAA NOHRSC',
+    },
     // Trails: Waymarked Trails (OpenStreetMap-based hiking routes), free public XYZ.
     trails: {
       kind: 'xyz',
@@ -1321,36 +1447,39 @@ const CFG = {
       attribution: '<a href="https://hiking.waymarkedtrails.org/">Waymarked Trails</a> · <a href="https://www.openstreetmap.org/copyright">© OSM</a>',
     },
 
-    // Forests / BLM / Parks all come from USGS PAD-US (Federal Fee Managers, authoritative)
-    // with server-side filtering by Manager Name. PAD-US is the canonical inventory of
-    // US protected lands and renders at all useful zoom levels (no minScale gotchas
-    // like the BLM_Natl_SMA_LimitedScale service has).
+    // Federal lands: Esri Living Atlas USA_Federal_Lands FeatureServer.
+    // We pull viewport-bounded GeoJSON (vector) on each map move. This works
+    // where the prior PAD-US raster export approach didn't, because:
+    //   1. services.arcgis.com has proper CORS for cross-origin browser fetches
+    //   2. The single feature service has all six federal agencies — we filter
+    //      client-side via MapLibre layer filter expressions.
+    // The `agbur` field holds the agency code: USFS, BLM, NPS, FWS, BOR, DOD.
     forests: {
-      kind: 'arcgis-export',
+      kind: 'feature-query',
       label: 'National Forests',
       color: '#3d6b46',
-      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
-      layers: 'show:0',
-      layerDefs: { 0: "Mang_Name = 'USFS'" },
+      featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
+      agbur: 'USFS',
       opacity: 0.45,
+      attribution: 'USA Federal Lands · Esri Living Atlas',
     },
     blm: {
-      kind: 'arcgis-export',
+      kind: 'feature-query',
       label: 'BLM Land',
       color: '#d4a017',
-      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
-      layers: 'show:0',
-      layerDefs: { 0: "Mang_Name = 'BLM'" },
+      featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
+      agbur: 'BLM',
       opacity: 0.45,
+      attribution: 'USA Federal Lands · Esri Living Atlas',
     },
     parks: {
-      kind: 'arcgis-export',
+      kind: 'feature-query',
       label: 'National Parks',
       color: '#1f5132',
-      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
-      layers: 'show:0',
-      layerDefs: { 0: "Mang_Name = 'NPS'" },
+      featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
+      agbur: 'NPS',
       opacity: 0.55,
+      attribution: 'USA Federal Lands · Esri Living Atlas',
     },
     wilderness: {
       kind: 'arcgis-export',
@@ -1421,7 +1550,7 @@ const CFG = {
 const S = {
   map: null,
   tracks: new Map(),         // id -> { id, name, color, geojson, stats, sourceId, layerIds[] }
-  layers: { slope: false, trails: false, forests: false, blm: false, parks: false, wilderness: false },
+  layers: { slope: false, aspect: false, snow: false, trails: false, forests: false, blm: false, parks: false, wilderness: false },
   basemap: 'topo',
   terrain: false,
   hillshade: false,
@@ -1545,6 +1674,7 @@ const Store = {
   KEY_VIEW: 'bcm.view.v1',
   KEY_SETTINGS: 'bcm.settings.v1',
   KEY_PINS: 'bcm.pins.v1',
+  KEY_TRACK_STYLES: 'bcm.track-styles.v1',
 
   savePins() {
     try { localStorage.setItem(this.KEY_PINS, JSON.stringify(S.pins || [])); }
@@ -1559,17 +1689,34 @@ const Store = {
 
   saveTracks() {
     try {
-      // Pinned (manifest/library) tracks are always loaded fresh from /gpx/, so
-      // we never persist them to localStorage. Only user-dropped tracks survive
-      // page reload.
+      // Two payloads: regular dropped tracks save full geometry to localStorage;
+      // pinned (library) tracks save only their styling overrides under a
+      // separate key so users can recolor the library without growing storage.
       const arr = [...S.tracks.values()].filter(t => !t.pinned).map(t => ({
         id: t.id, name: t.name, color: t.color,
-        geojson: t.geojson, stats: { distance: t.stats.distance, gain: t.stats.gain, loss: t.stats.loss, maxEle: t.stats.maxEle, minEle: t.stats.minEle, wptCount: t.stats.wptCount, lineCount: t.stats.lineCount },
+        geojson: t.geojson,
+        stats: { distance: t.stats.distance, gain: t.stats.gain, loss: t.stats.loss, maxEle: t.stats.maxEle, minEle: t.stats.minEle, wptCount: t.stats.wptCount, lineCount: t.stats.lineCount },
         source: t.source,
+        visible: t.visible !== false,
+        lineWidth: t.lineWidth,
+        opacity: t.opacity,
       }));
       const json = JSON.stringify(arr);
-      // Stay under ~4MB to be polite with localStorage
       if (json.length < 4_000_000) localStorage.setItem(this.KEY_TRACKS, json);
+
+      // Library style overrides — keyed by track source (URL of the GPX file)
+      // so they survive across reloads where the pinned track gets a new id.
+      const overrides = {};
+      for (const t of S.tracks.values()) {
+        if (!t.pinned) continue;
+        overrides[t.source] = {
+          color: t.color,
+          visible: t.visible !== false,
+          lineWidth: t.lineWidth,
+          opacity: t.opacity,
+        };
+      }
+      localStorage.setItem(this.KEY_TRACK_STYLES, JSON.stringify(overrides));
     } catch (e) { console.warn('Storage save failed', e); }
   },
   loadTracks() {
@@ -1578,6 +1725,12 @@ const Store = {
       if (!raw) return [];
       return JSON.parse(raw);
     } catch (e) { return []; }
+  },
+  loadTrackStyles() {
+    try {
+      const raw = localStorage.getItem(this.KEY_TRACK_STYLES);
+      return raw ? JSON.parse(raw) : {};
+    } catch (e) { return {}; }
   },
   saveSettings() {
     try {
@@ -1770,6 +1923,10 @@ async function setBasemap(key) {
   S.map.setStyle(buildStyle(key));
   await new Promise(res => S.map.once('styledata', res));
 
+  // Style changed — reset feature-query state so layers refetch
+  unregisterFederalLandsMoveEnd();
+  _flLastKey = null;
+
   // Re-add terrain / hillshade / lands / tracks
   if (wasTerrain) await setTerrain(true, true);
   if (wasHillshade) await setHillshade(true, true);
@@ -1906,13 +2063,17 @@ function makeToggle({ label, sub, color, on, dataT, onChange }) {
 // We insert each new layer ABOVE everything before it in this list, and BELOW
 // everything after it. This stops public-lands fills from covering the slope
 // shading or trails when toggle order varies.
-const LANDS_Z_ORDER = ['slope', 'forests', 'blm', 'parks', 'wilderness', 'trails'];
+const LANDS_Z_ORDER = ['aspect', 'slope', 'snow', 'forests', 'blm', 'parks', 'wilderness', 'trails'];
 
 function landsInsertBeforeId(key) {
   const i = LANDS_Z_ORDER.indexOf(key);
   for (let j = i + 1; j < LANDS_Z_ORDER.length; j++) {
     const next = LANDS_Z_ORDER[j];
-    if (S.layers[next] && S.map.getLayer(`lands-${next}`)) return `lands-${next}`;
+    if (!S.layers[next]) continue;
+    // Vector lands have two layers (-fill and -line); raster lands have one (lands-X).
+    // Use whichever exists.
+    const cands = [`lands-${next}`, `lands-${next}-fill`];
+    for (const id of cands) if (S.map.getLayer(id)) return id;
   }
   return firstTrackLayerId() || firstSymbolLayerId();
 }
@@ -1926,54 +2087,210 @@ function setLayer(key, on, force = false) {
   const cfg = CFG.layers[key];
   const sourceId = `lands-${key}`;
   const layerId = `lands-${key}`;
+  const fillId = `lands-${key}-fill`;
+  const lineId = `lands-${key}-line`;
 
   if (on) {
-    if (!S.map.getSource(sourceId)) {
-      const kind = cfg.kind || 'arcgis-export';
-      let tileUrl, tileSize, attribution;
+    const kind = cfg.kind || 'arcgis-export';
 
-      if (kind === 'arcgis-export') {
-        // ArcGIS MapServer dynamic export — used for PAD-US public lands & Wilderness
-        tileUrl = `${cfg.url}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png32&transparent=true&dpi=96&layers=${cfg.layers}&f=image`;
-        if (cfg.layerDefs) tileUrl += `&layerDefs=${encodeURIComponent(JSON.stringify(cfg.layerDefs))}`;
-        tileSize = 512;
-        attribution = cfg.attribution || (cfg.label + ' (public ArcGIS service)');
-      } else if (kind === 'arcgis-image') {
-        // ArcGIS ImageServer with a renderingRule — used for USGS 3DEP slope shading
-        tileUrl = `${cfg.url}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png&f=image`;
-        if (cfg.renderingRule) tileUrl += `&renderingRule=${encodeURIComponent(JSON.stringify(cfg.renderingRule))}`;
-        tileSize = 512;
-        attribution = cfg.attribution || (cfg.label + ' (public ArcGIS image service)');
-      } else if (kind === 'xyz') {
-        // Plain XYZ tile URL (e.g. Waymarked Trails)
-        tileUrl = cfg.url;
-        tileSize = cfg.tileSize || 256;
-        attribution = cfg.attribution || cfg.label;
+    if (kind === 'feature-query') {
+      // Vector: empty source + fill/line layers + a moveend listener that
+      // refetches when the viewport changes.
+      if (!S.map.getSource(sourceId)) {
+        S.map.addSource(sourceId, {
+          type: 'geojson',
+          data: { type: 'FeatureCollection', features: [] },
+          attribution: cfg.attribution || cfg.label,
+        });
       }
-
-      S.map.addSource(sourceId, {
-        type: 'raster',
-        tiles: [tileUrl],
-        tileSize,
-        attribution,
-        ...(cfg.maxzoom != null ? { maxzoom: cfg.maxzoom } : {}),
-      });
-    }
-    if (!S.map.getLayer(layerId)) {
       const beforeId = landsInsertBeforeId(key);
-      S.map.addLayer({
-        id: layerId,
-        type: 'raster',
-        source: sourceId,
-        paint: { 'raster-opacity': cfg.opacity },
-      }, beforeId);
+      if (!S.map.getLayer(fillId)) {
+        S.map.addLayer({
+          id: fillId,
+          type: 'fill',
+          source: sourceId,
+          paint: {
+            'fill-color': cfg.color,
+            'fill-opacity': cfg.opacity,
+          },
+        }, beforeId);
+      }
+      if (!S.map.getLayer(lineId)) {
+        S.map.addLayer({
+          id: lineId,
+          type: 'line',
+          source: sourceId,
+          paint: {
+            'line-color': cfg.color,
+            'line-width': 1,
+            'line-opacity': 0.7,
+          },
+        }, beforeId);
+      }
+      // Fetch immediately for current viewport
+      fetchFederalLandsViewport();
+      registerFederalLandsMoveEnd();
+      // Click for info popup (name of the unit)
+      S.map.on('click', fillId, federalLandClick);
+      S.map.on('mouseenter', fillId, () => S.map.getCanvas().style.cursor = 'pointer');
+      S.map.on('mouseleave', fillId, () => S.map.getCanvas().style.cursor = '');
+    } else {
+      // Raster path — three sub-kinds, one source, one layer.
+      if (!S.map.getSource(sourceId)) {
+        let tileUrl, tileSize, attribution;
+
+        if (kind === 'arcgis-export') {
+          tileUrl = `${cfg.url}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png32&transparent=true&dpi=96&layers=${cfg.layers}&f=image`;
+          if (cfg.layerDefs) tileUrl += `&layerDefs=${encodeURIComponent(JSON.stringify(cfg.layerDefs))}`;
+          tileSize = 512;
+          attribution = cfg.attribution || (cfg.label + ' (public ArcGIS service)');
+        } else if (kind === 'arcgis-image') {
+          tileUrl = `${cfg.url}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png&f=image`;
+          if (cfg.renderingRule) tileUrl += `&renderingRule=${encodeURIComponent(JSON.stringify(cfg.renderingRule))}`;
+          tileSize = 512;
+          attribution = cfg.attribution || (cfg.label + ' (public ArcGIS image service)');
+        } else if (kind === 'xyz') {
+          tileUrl = cfg.url;
+          tileSize = cfg.tileSize || 256;
+          attribution = cfg.attribution || cfg.label;
+        }
+
+        S.map.addSource(sourceId, {
+          type: 'raster',
+          tiles: [tileUrl],
+          tileSize,
+          attribution,
+          ...(cfg.maxzoom != null ? { maxzoom: cfg.maxzoom } : {}),
+        });
+      }
+      if (!S.map.getLayer(layerId)) {
+        const beforeId = landsInsertBeforeId(key);
+        S.map.addLayer({
+          id: layerId,
+          type: 'raster',
+          source: sourceId,
+          paint: { 'raster-opacity': cfg.opacity },
+        }, beforeId);
+      }
     }
   } else {
-    if (S.map.getLayer(layerId)) S.map.removeLayer(layerId);
+    // Off — remove all layer/source variants
+    for (const id of [layerId, fillId, lineId]) {
+      if (S.map.getLayer(id)) S.map.removeLayer(id);
+    }
     if (S.map.getSource(sourceId)) S.map.removeSource(sourceId);
+    // If no feature-query lands are still on, drop the moveend listener
+    const anyVectorOn = Object.entries(CFG.layers).some(([k, c]) =>
+      c.kind === 'feature-query' && S.layers[k]);
+    if (!anyVectorOn) unregisterFederalLandsMoveEnd();
   }
   updateLegend();
   Store.saveSettings();
+}
+
+// ============================================================
+// Federal lands — vector viewport queries (Esri Living Atlas)
+// ============================================================
+// One service feeds all three vector layers (forests, blm, parks).
+// Each MapLibre source holds only that agency's polygons; we run one fetch
+// per viewport refresh and split the response into per-source feature
+// collections by `agbur`.
+let _flMoveEnd = null;
+let _flAbort = null;
+let _flLastKey = null;
+
+function viewportKey() {
+  const b = S.map.getBounds();
+  // Round to ~3 decimal places so tiny pans don't trigger refetch
+  return `${b.getWest().toFixed(3)},${b.getSouth().toFixed(3)},${b.getEast().toFixed(3)},${b.getNorth().toFixed(3)}`;
+}
+
+async function fetchFederalLandsViewport() {
+  // Which agencies are currently visible
+  const wanted = Object.entries(CFG.layers)
+    .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k])
+    .map(([k, c]) => ({ key: k, agbur: c.agbur }));
+  if (!wanted.length) return;
+
+  const k = viewportKey();
+  if (k === _flLastKey) return;
+  _flLastKey = k;
+
+  const b = S.map.getBounds();
+  // Don't issue a global query at low zooms — too much data, request will
+  // either fail the maxRecordCount limit or the response will be slow.
+  if (S.map.getZoom() < 5) return;
+
+  if (_flAbort) _flAbort.abort();
+  _flAbort = new AbortController();
+
+  const where = `agbur IN (${wanted.map(w => `'${w.agbur}'`).join(',')})`;
+  const params = new URLSearchParams({
+    where,
+    geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
+    geometryType: 'esriGeometryEnvelope',
+    inSR: '4326',
+    outSR: '4326',
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: 'agbur,name1,name2',
+    returnGeometry: 'true',
+    f: 'geojson',
+    resultRecordCount: '500',
+    geometryPrecision: '5',
+  });
+
+  // All three layers share the same query URL — pick any
+  const url = wanted[0] && CFG.layers[wanted[0].key].featureUrl;
+  if (!url) return;
+
+  try {
+    const r = await fetch(`${url}?${params}`, { signal: _flAbort.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    const features = (data && data.features) || [];
+
+    // Split features by agency; assign to corresponding source
+    for (const w of wanted) {
+      const sub = {
+        type: 'FeatureCollection',
+        features: features.filter(f => (f.properties || {}).agbur === w.agbur),
+      };
+      const src = S.map.getSource(`lands-${w.key}`);
+      if (src) src.setData(sub);
+    }
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('Federal lands fetch failed:', e);
+  }
+}
+
+function registerFederalLandsMoveEnd() {
+  if (_flMoveEnd) return;
+  _flMoveEnd = () => fetchFederalLandsViewport();
+  S.map.on('moveend', _flMoveEnd);
+}
+function unregisterFederalLandsMoveEnd() {
+  if (!_flMoveEnd) return;
+  S.map.off('moveend', _flMoveEnd);
+  _flMoveEnd = null;
+  _flLastKey = null;
+}
+
+function federalLandClick(e) {
+  const f = e.features[0];
+  const p = f.properties || {};
+  const name = p.name1 || p.name2 || 'Federal land';
+  const agency = ({
+    USFS: 'US Forest Service', BLM: 'Bureau of Land Management',
+    NPS: 'National Park Service', FWS: 'Fish & Wildlife Service',
+    BOR: 'Bureau of Reclamation', DOD: 'Department of Defense',
+  })[p.agbur] || p.agbur || '';
+  new maplibregl.Popup({ offset: 8, className: 'wpt-popup-wrap', maxWidth: '260px' })
+    .setLngLat(e.lngLat)
+    .setHTML(`<div class="fed-popup">
+      <div class="fed-popup-name">${escapeHtml(name)}</div>
+      <div class="fed-popup-agency">${escapeHtml(agency)}</div>
+    </div>`)
+    .addTo(S.map);
 }
 
 function firstTrackLayerId() {
@@ -1985,7 +2302,12 @@ function buildLayersUI() {
   const list = $('#layers-list');
   list.innerHTML = '';
   for (const [k, v] of Object.entries(CFG.layers)) {
-    const sub = v.sub || (k === 'wilderness' ? 'USFS Wilderness' : 'USGS PAD-US');
+    let sub = v.sub;
+    if (!sub) {
+      if (v.kind === 'feature-query') sub = 'Esri Living Atlas';
+      else if (k === 'wilderness') sub = 'USFS Wilderness';
+      else sub = '';
+    }
     const el = makeToggle({
       label: v.label,
       sub,
@@ -2005,11 +2327,22 @@ function updateLegend() {
   legend.classList.add('show');
   $('#legend-items').innerHTML = active.map(([k]) => {
     const c = CFG.layers[k];
-    // Slope gets a gradient swatch matching the USGS Slope Map ramp.
     if (k === 'slope') {
       return `<div class="legend-item">
         <div class="legend-swatch slope-swatch" title="0° gray → 45°+ red-brown"></div>
         ${c.label}<span class="legend-sub"> 0–60°</span>
+      </div>`;
+    }
+    if (k === 'aspect') {
+      return `<div class="legend-item">
+        <div class="legend-swatch aspect-swatch" title="N=red, E=yellow, S=cyan, W=purple"></div>
+        ${c.label}<span class="legend-sub"> N→S→W</span>
+      </div>`;
+    }
+    if (k === 'snow') {
+      return `<div class="legend-item">
+        <div class="legend-swatch snow-swatch" title="white = no snow → deep blue = 100+ in"></div>
+        ${c.label}<span class="legend-sub"> in</span>
       </div>`;
     }
     return `<div class="legend-item"><div class="legend-swatch" style="background:${c.color};opacity:${c.opacity + 0.2}"></div>${c.label}</div>`;
@@ -2259,6 +2592,8 @@ function renderTrackOnMap(track) {
 
   // Glow underlay (lines only). Filter excludes Points so waypoints don't
   // get a giant blurred halo applied to them.
+  const lineW = track.lineWidth || 3;
+  const op = track.opacity ?? 0.95;
   S.map.addLayer({
     id: glowId,
     type: 'line',
@@ -2266,11 +2601,14 @@ function renderTrackOnMap(track) {
     filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
     paint: {
       'line-color': track.color,
-      'line-width': 9,
-      'line-opacity': 0.25,
+      'line-width': lineW * 3,
+      'line-opacity': op * 0.26,
       'line-blur': 4,
     },
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    layout: {
+      'line-cap': 'round', 'line-join': 'round',
+      visibility: track.visible === false ? 'none' : 'visible',
+    },
   });
   // Main line
   S.map.addLayer({
@@ -2280,10 +2618,13 @@ function renderTrackOnMap(track) {
     filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
     paint: {
       'line-color': track.color,
-      'line-width': 3,
-      'line-opacity': 0.95,
+      'line-width': lineW,
+      'line-opacity': op,
     },
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
+    layout: {
+      'line-cap': 'round', 'line-join': 'round',
+      visibility: track.visible === false ? 'none' : 'visible',
+    },
   });
 
   // ----- Waypoints (Point / MultiPoint) -----
@@ -2335,6 +2676,7 @@ function renderTrackOnMap(track) {
       id: wptId,
       type: 'circle',
       source: wptSrcId,
+      layout: { visibility: track.visible === false ? 'none' : 'visible' },
       paint: {
         'circle-radius': radiusByZoom,
         'circle-color': colorByKind,
@@ -2363,6 +2705,7 @@ function renderTrackOnMap(track) {
         'text-allow-overlap': false,
         'text-optional': true,
         'text-max-width': 9,
+        visibility: track.visible === false ? 'none' : 'visible',
       },
       paint: {
         'text-color': '#ffffff',
@@ -2419,6 +2762,7 @@ function renderTrackOnMap(track) {
       type: 'circle',
       source: pinSource,
       filter: ['==', ['get', 'kind'], 'start'],
+      layout: { visibility: track.visible === false ? 'none' : 'visible' },
       paint: {
         'circle-radius': 6,
         'circle-color': '#6BCB77',
@@ -2431,6 +2775,7 @@ function renderTrackOnMap(track) {
       type: 'circle',
       source: pinSource,
       filter: ['==', ['get', 'kind'], 'end'],
+      layout: { visibility: track.visible === false ? 'none' : 'visible' },
       paint: {
         'circle-radius': 6,
         'circle-color': '#FF6B9D',
@@ -2568,7 +2913,7 @@ function buildTracksUI() {
   }
   for (const t of S.tracks.values()) {
     const el = document.createElement('div');
-    el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '');
+    el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '') + (t.visible === false ? ' hidden' : '');
     const wpts = t.stats.wptCount || 0;
     const wptStat = wpts > 0
       ? `<div class="track-item-stat"><span class="label">⊙</span>${wpts}<span class="label">${wpts === 1 ? 'pt' : 'pts'}</span></div>`
@@ -2581,15 +2926,36 @@ function buildTracksUI() {
       ? `<div class="track-item-stat"><span class="label">MAX</span>${fmt.ele(t.stats.maxEle)}<span class="label">ft</span></div>` : '';
     const pinTag = t.pinned ? '<span class="track-pin" title="Library track — managed via manifest.json">📌</span>' : '';
     const deleteBtn = t.pinned ? '' : '<button class="track-act danger" data-act="delete" title="Remove">×</button>';
+    const visible = t.visible !== false;
+    const eyeIcon = visible
+      ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>'
+      : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+    const lineWidth = t.lineWidth || 3;
     el.innerHTML = `
-      <div class="track-item-color" style="background:${t.color}"></div>
+      <div class="track-item-color" data-act="color-pick" title="Change color" style="background:${t.color}"></div>
       <div class="track-item-name">${pinTag}${escapeHtml(t.name)}</div>
-      <div class="track-item-stats">
-        ${distStat}${gainStat}${maxStat}${wptStat}
-      </div>
+      <div class="track-item-stats">${distStat}${gainStat}${maxStat}${wptStat}</div>
       <div class="track-item-actions">
+        <button class="track-act" data-act="settings" title="Style">⚙</button>
+        <button class="track-act" data-act="visibility" title="Show/hide">${eyeIcon}</button>
         <button class="track-act" data-act="fit" title="Fit to view">⤢</button>
         ${deleteBtn}
+      </div>
+      <div class="track-settings" data-track="${t.id}" hidden>
+        <div class="track-setting-row">
+          <label>Color</label>
+          <div class="color-palette">
+            ${CFG.trackColors.map(c => `<button class="color-swatch ${c === t.color ? 'active' : ''}" data-color="${c}" style="background:${c}"></button>`).join('')}
+          </div>
+        </div>
+        <div class="track-setting-row">
+          <label>Line width <span class="lw-val">${lineWidth}px</span></label>
+          <input type="range" class="lw-slider" min="1" max="8" step="0.5" value="${lineWidth}">
+        </div>
+        <div class="track-setting-row">
+          <label>Opacity <span class="op-val">${Math.round((t.opacity ?? 0.95) * 100)}%</span></label>
+          <input type="range" class="op-slider" min="0.2" max="1" step="0.05" value="${t.opacity ?? 0.95}">
+        </div>
       </div>
     `;
     el.addEventListener('click', (e) => {
@@ -2600,13 +2966,98 @@ function buildTracksUI() {
       } else if (act === 'fit') {
         e.stopPropagation();
         fitTrack(t);
+      } else if (act === 'visibility') {
+        e.stopPropagation();
+        setTrackVisible(t.id, !visible);
+      } else if (act === 'color-pick' || act === 'settings') {
+        e.stopPropagation();
+        // Toggle settings panel
+        const panel = el.querySelector('.track-settings');
+        panel.hidden = !panel.hidden;
+        el.classList.toggle('expanded', !panel.hidden);
       } else {
-        selectTrack(t.id);
+        if (visible) selectTrack(t.id);
         fitTrack(t);
       }
     });
+    // Color picker
+    el.querySelectorAll('.color-swatch').forEach(b => b.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setTrackColor(t.id, b.dataset.color);
+    }));
+    // Line width
+    const lwSlider = el.querySelector('.lw-slider');
+    if (lwSlider) {
+      lwSlider.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const v = parseFloat(e.target.value);
+        el.querySelector('.lw-val').textContent = v + 'px';
+        setTrackLineWidth(t.id, v);
+      });
+      lwSlider.addEventListener('click', (e) => e.stopPropagation());
+    }
+    // Opacity
+    const opSlider = el.querySelector('.op-slider');
+    if (opSlider) {
+      opSlider.addEventListener('input', (e) => {
+        e.stopPropagation();
+        const v = parseFloat(e.target.value);
+        el.querySelector('.op-val').textContent = Math.round(v * 100) + '%';
+        setTrackOpacity(t.id, v);
+      });
+      opSlider.addEventListener('click', (e) => e.stopPropagation());
+    }
     list.appendChild(el);
   }
+}
+
+// Per-track styling helpers — they directly mutate the rendered MapLibre paint
+// properties so updates feel instant, and persist via Store.saveTracks().
+function setTrackVisible(id, visible) {
+  const t = S.tracks.get(id);
+  if (!t) return;
+  t.visible = visible;
+  const vis = visible ? 'visible' : 'none';
+  for (const lid of t.layerIds || []) {
+    if (S.map.getLayer(lid)) S.map.setLayoutProperty(lid, 'visibility', vis);
+  }
+  if (!visible && S.selectedTrackId === id) hideElevation();
+  buildTracksUI();
+  Store.saveTracks();
+}
+
+function setTrackColor(id, color) {
+  const t = S.tracks.get(id);
+  if (!t) return;
+  t.color = color;
+  const sourceId = `track-${id}`;
+  for (const lid of [`${sourceId}-glow`, `${sourceId}-line`]) {
+    if (S.map.getLayer(lid)) S.map.setPaintProperty(lid, 'line-color', color);
+  }
+  // Re-render elevation chart if it's open, since point colors include color
+  if (S.elevTrackId === id) showElevation(t);
+  buildTracksUI();
+  Store.saveTracks();
+}
+
+function setTrackLineWidth(id, w) {
+  const t = S.tracks.get(id);
+  if (!t) return;
+  t.lineWidth = w;
+  const sourceId = `track-${id}`;
+  if (S.map.getLayer(`${sourceId}-line`)) S.map.setPaintProperty(`${sourceId}-line`, 'line-width', w);
+  if (S.map.getLayer(`${sourceId}-glow`)) S.map.setPaintProperty(`${sourceId}-glow`, 'line-width', w * 3);
+  Store.saveTracks();
+}
+
+function setTrackOpacity(id, op) {
+  const t = S.tracks.get(id);
+  if (!t) return;
+  t.opacity = op;
+  const sourceId = `track-${id}`;
+  if (S.map.getLayer(`${sourceId}-line`)) S.map.setPaintProperty(`${sourceId}-line`, 'line-opacity', op);
+  if (S.map.getLayer(`${sourceId}-glow`)) S.map.setPaintProperty(`${sourceId}-glow`, 'line-opacity', op * 0.26);
+  Store.saveTracks();
 }
 
 // ============================================================
@@ -3083,6 +3534,8 @@ async function tryManifest() {
     if (!r.ok) return;
     const m = await r.json();
     if (!Array.isArray(m.files)) return;
+
+    const styleOverrides = Store.loadTrackStyles();
     let loaded = 0;
     for (const entry of m.files) {
       const file = typeof entry === 'string' ? entry : entry.file;
@@ -3098,6 +3551,14 @@ async function tryManifest() {
       const t = await loadGPXFromURL(url, name);
       if (t) {
         t.pinned = true;
+        // Apply any user-saved style overrides for this file
+        const ov = styleOverrides[url];
+        if (ov) {
+          if (ov.color) setTrackColor(t.id, ov.color);
+          if (ov.lineWidth) setTrackLineWidth(t.id, ov.lineWidth);
+          if (ov.opacity != null) setTrackOpacity(t.id, ov.opacity);
+          if (ov.visible === false) setTrackVisible(t.id, false);
+        }
         loaded++;
       }
     }
