@@ -831,9 +831,27 @@
     z-index: 3;
     gap: 18px;
   }
-  .status-item { display: flex; gap: 6px; }
+  .status-item { display: flex; gap: 6px; align-items: center; }
   .status-item .lbl { color: var(--text-muted); }
   .status-item .v { color: var(--text); }
+  .status-item.clickable-coords {
+    cursor: pointer;
+    padding: 2px 8px;
+    margin-left: -8px;
+    border-radius: 4px;
+    transition: background var(--t-fast);
+  }
+  .status-item.clickable-coords:hover { background: rgba(255,255,255,0.06); }
+  .status-item.clickable-coords .copy-hint {
+    margin-left: 8px;
+    color: var(--accent);
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0;
+    transition: opacity var(--t-fast);
+  }
+  .status-item.clickable-coords:hover .copy-hint { opacity: 1; }
   .status-spacer { flex: 1; }
 
   /* === SCALE BAR (custom) === */
@@ -1081,6 +1099,67 @@
     z-index: 50;
     letter-spacing: 0.02em;
   }
+
+  /* === MEASURE TOOL === */
+  body.measure-mode .maplibregl-canvas { cursor: crosshair !important; }
+  body.measure-mode::after {
+    content: 'Click to add points · double-click to finish · Esc to clear';
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #FFD93D;
+    color: #1a1d27;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    pointer-events: none;
+    z-index: 50;
+    letter-spacing: 0.02em;
+  }
+  .measure-readout {
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-elevated);
+    border: 1px solid #FFD93D;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    padding: 7px 14px;
+    border-radius: 18px;
+    z-index: 7;
+    display: none;
+    align-items: center;
+    gap: 10px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .measure-readout.show { display: flex; }
+  .measure-readout .m-label {
+    color: #FFD93D;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    font-weight: 600;
+  }
+  .measure-readout .m-val { font-weight: 600; }
+  .measure-readout .m-pts { color: var(--text-muted); font-size: 10.5px; }
+  .measure-readout button {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-dim);
+    border: none;
+    border-radius: 50%;
+    width: 18px; height: 18px;
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .measure-readout button:hover { background: var(--danger); color: #fff; }
   .pin-popup-name {
     font-weight: 600; font-size: 13px; color: #FFD93D; margin-bottom: 4px;
   }
@@ -1302,6 +1381,12 @@
           <circle cx="12" cy="9" r="2.5"/>
         </svg>
       </button>
+      <button class="map-ctrl" id="btn-measure" title="Measure distance (M)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 16 16 2l6 6L8 22z"/>
+          <path d="M7 10l1 1m1-3l1 1m1-3l1 1m1-3l1 1m1-3l1 1"/>
+        </svg>
+      </button>
     </div>
 
     <!-- Weather panel -->
@@ -1326,13 +1411,12 @@
 
     <!-- Status bar -->
     <div class="status-bar">
-      <div class="status-item">
+      <div class="status-item clickable-coords" id="copy-coords" title="Click to copy lat,lng">
         <span class="lbl">LAT</span>
         <span class="v" id="stat-lat">—</span>
-      </div>
-      <div class="status-item">
-        <span class="lbl">LNG</span>
+        <span class="lbl" style="margin-left:6px">LNG</span>
         <span class="v" id="stat-lng">—</span>
+        <span class="copy-hint">copy</span>
       </div>
       <div class="status-item">
         <span class="lbl">ELEV</span>
@@ -1359,6 +1443,9 @@
         <text x="12" y="7.5" text-anchor="middle" font-size="6" font-family="DM Sans" font-weight="700" fill="white">N</text>
       </svg>
     </div>
+
+    <!-- Measure readout (top-center) -->
+    <div class="measure-readout" id="measure-readout"></div>
 
     <!-- Legend -->
     <div class="legend" id="legend">
@@ -1422,15 +1509,16 @@ const CFG = {
       opacity: 0.5,
       attribution: 'USGS 3DEP',
     },
-    // Snow depth: NOAA NOHRSC daily snow analysis — "snow depth" in inches.
-    // Useful for trip planning, especially below treeline where satellite imagery
-    // may not show snow clearly. Updated daily.
+    // Snow depth: NOAA NOHRSC daily snow analysis. Layer 3 = the snow-depth
+    // raster image (other sublayers are boundary/footprint).
+    // mapservices.weather.noaa.gov is the new canonical NOAA service host;
+    // the older idpgis.ncep.noaa.gov has been migrated.
     snow: {
       kind: 'arcgis-export',
       label: 'Snow Depth',
       sub: 'NOAA NOHRSC, inches',
       color: '#80d8ff',
-      url: 'https://idpgis.ncep.noaa.gov/arcgis/rest/services/NWS_Observations/NOHRSC_Snow_Analysis/MapServer',
+      url: 'https://mapservices.weather.noaa.gov/raster/rest/services/snow/NOHRSC_Snow_Analysis/MapServer',
       layers: 'show:3',
       opacity: 0.65,
       attribution: 'NOAA NOHRSC',
@@ -1453,13 +1541,14 @@ const CFG = {
     //   1. services.arcgis.com has proper CORS for cross-origin browser fetches
     //   2. The single feature service has all six federal agencies — we filter
     //      client-side via MapLibre layer filter expressions.
-    // The `agbur` field holds the agency code: USFS, BLM, NPS, FWS, BOR, DOD.
+    // The field is `Agency` (capital A) and values are full names like
+    // "U.S. Forest Service", "Bureau of Land Management", "National Park Service".
     forests: {
       kind: 'feature-query',
       label: 'National Forests',
       color: '#3d6b46',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agbur: 'USFS',
+      agency: 'U.S. Forest Service',
       opacity: 0.45,
       attribution: 'USA Federal Lands · Esri Living Atlas',
     },
@@ -1468,7 +1557,7 @@ const CFG = {
       label: 'BLM Land',
       color: '#d4a017',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agbur: 'BLM',
+      agency: 'Bureau of Land Management',
       opacity: 0.45,
       attribution: 'USA Federal Lands · Esri Living Atlas',
     },
@@ -1477,7 +1566,7 @@ const CFG = {
       label: 'National Parks',
       color: '#1f5132',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agbur: 'NPS',
+      agency: 'National Park Service',
       opacity: 0.55,
       attribution: 'USA Federal Lands · Esri Living Atlas',
     },
@@ -1836,10 +1925,35 @@ async function initMap() {
     showWeatherAt(e.lngLat.lng, e.lngLat.lat);
   });
 
+  // Tile-load error reporter. When a raster tile (slope/aspect/snow/trails/
+  // wilderness) fails to fetch — usually CORS or 4xx from the upstream
+  // service — surface it via a toast so the user knows why the layer is
+  // blank instead of silently failing. Limit how often we toast for the
+  // same source so a flood of failed tiles doesn't spam the screen.
+  const _layerErrSeen = new Map();
+  S.map.on('error', (e) => {
+    const sourceId = e.sourceId || (e.source && e.source.id) || '';
+    if (!sourceId.startsWith('lands-')) return;
+    const key = sourceId.replace('lands-', '');
+    const cfg = CFG.layers[key];
+    if (!cfg) return;
+    const now = Date.now();
+    const last = _layerErrSeen.get(sourceId) || 0;
+    if (now - last < 8000) return; // throttle
+    _layerErrSeen.set(sourceId, now);
+    const reason = (e.error && e.error.message) || 'tile request failed';
+    toast(`${cfg.label}: ${reason}`, 'error', 5000);
+    console.warn(`[layer:${key}]`, e);
+  });
+
   // Pin-mode: a plain click drops a pin. Click on an existing pin is
   // intercepted by the pin layer's own click handler (which shows a popup),
   // so we use the generic map click for the empty-space case.
   S.map.on('click', (e) => {
+    if (S.measure.active) {
+      addMeasurePoint(e.lngLat);
+      return;
+    }
     if (!S.pinMode) return;
     // If the click hit one of the pin layer features, the pin's own handler
     // already ran — don't drop another. queryRenderedFeatures lets us check.
@@ -1847,6 +1961,14 @@ async function initMap() {
     if (hit.length) return;
     dropPin(e.lngLat);
     setPinMode(false); // one-shot — exit pin mode after drop
+  });
+
+  // Double-click ends measurement mode (preserving the path on screen).
+  S.map.on('dblclick', (e) => {
+    if (S.measure.active) {
+      e.preventDefault?.();
+      setMeasureMode(false);
+    }
   });
 
   // Long-press for weather (mobile / touch)
@@ -1935,6 +2057,8 @@ async function setBasemap(key) {
   // Pin source/layers got nuked along with the style — recreate.
   ensurePinLayers();
   refreshPinLayer();
+  ensureMeasureLayers();
+  refreshMeasureLayer();
 
   Store.saveSettings();
 }
@@ -2145,7 +2269,11 @@ function setLayer(key, on, force = false) {
           tileSize = 512;
           attribution = cfg.attribution || (cfg.label + ' (public ArcGIS service)');
         } else if (kind === 'arcgis-image') {
-          tileUrl = `${cfg.url}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png&f=image`;
+          // ArcGIS ImageServer with a renderingRule — used for USGS 3DEP slope/aspect.
+          // The format string matters: png32 is more reliably accepted than plain png
+          // by some ArcGIS deployments. transparent=true is required so non-data
+          // pixels (ocean, no-data) show through to the basemap.
+          tileUrl = `${cfg.url}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png32&interpolation=RSP_BilinearInterpolation&transparent=true&f=image`;
           if (cfg.renderingRule) tileUrl += `&renderingRule=${encodeURIComponent(JSON.stringify(cfg.renderingRule))}`;
           tileSize = 512;
           attribution = cfg.attribution || (cfg.label + ' (public ArcGIS image service)');
@@ -2209,7 +2337,7 @@ async function fetchFederalLandsViewport() {
   // Which agencies are currently visible
   const wanted = Object.entries(CFG.layers)
     .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k])
-    .map(([k, c]) => ({ key: k, agbur: c.agbur }));
+    .map(([k, c]) => ({ key: k, agency: c.agency }));
   if (!wanted.length) return;
 
   const k = viewportKey();
@@ -2224,7 +2352,10 @@ async function fetchFederalLandsViewport() {
   if (_flAbort) _flAbort.abort();
   _flAbort = new AbortController();
 
-  const where = `agbur IN (${wanted.map(w => `'${w.agbur}'`).join(',')})`;
+  // Build SQL WHERE with full agency names quoted. Esri uses the Agency field
+  // with values like "U.S. Forest Service", "Bureau of Land Management".
+  // Single quotes inside the value (none here) would need doubling for SQL.
+  const where = `Agency IN (${wanted.map(w => `'${w.agency}'`).join(',')})`;
   const params = new URLSearchParams({
     where,
     geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
@@ -2232,14 +2363,13 @@ async function fetchFederalLandsViewport() {
     inSR: '4326',
     outSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
-    outFields: 'agbur,name1,name2',
+    outFields: 'Agency,unit_name',
     returnGeometry: 'true',
     f: 'geojson',
     resultRecordCount: '500',
     geometryPrecision: '5',
   });
 
-  // All three layers share the same query URL — pick any
   const url = wanted[0] && CFG.layers[wanted[0].key].featureUrl;
   if (!url) return;
 
@@ -2247,19 +2377,23 @@ async function fetchFederalLandsViewport() {
     const r = await fetch(`${url}?${params}`, { signal: _flAbort.signal });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
+    if (data && data.error) throw new Error(data.error.message || 'service error');
     const features = (data && data.features) || [];
 
     // Split features by agency; assign to corresponding source
     for (const w of wanted) {
       const sub = {
         type: 'FeatureCollection',
-        features: features.filter(f => (f.properties || {}).agbur === w.agbur),
+        features: features.filter(f => (f.properties || {}).Agency === w.agency),
       };
       const src = S.map.getSource(`lands-${w.key}`);
       if (src) src.setData(sub);
     }
   } catch (e) {
-    if (e.name !== 'AbortError') console.warn('Federal lands fetch failed:', e);
+    if (e.name !== 'AbortError') {
+      console.warn('Federal lands fetch failed:', e);
+      toast(`Federal lands: ${e.message}`, 'error', 4500);
+    }
   }
 }
 
@@ -2278,12 +2412,8 @@ function unregisterFederalLandsMoveEnd() {
 function federalLandClick(e) {
   const f = e.features[0];
   const p = f.properties || {};
-  const name = p.name1 || p.name2 || 'Federal land';
-  const agency = ({
-    USFS: 'US Forest Service', BLM: 'Bureau of Land Management',
-    NPS: 'National Park Service', FWS: 'Fish & Wildlife Service',
-    BOR: 'Bureau of Reclamation', DOD: 'Department of Defense',
-  })[p.agbur] || p.agbur || '';
+  const name = p.unit_name || 'Federal land';
+  const agency = p.Agency || '';
   new maplibregl.Popup({ offset: 8, className: 'wpt-popup-wrap', maxWidth: '260px' })
     .setLngLat(e.lngLat)
     .setHTML(`<div class="fed-popup">
@@ -2479,6 +2609,142 @@ function clearAllPins() {
 }
 
 // ============================================================
+// MEASUREMENT TOOL
+// ============================================================
+// Click to add waypoints, double-click to finish. Shows running total
+// distance and elevation gain/loss along the path. Uses the same haversine
+// distance calc as track stats so numbers are consistent.
+const MEASURE_SOURCE = 'measure';
+const MEASURE_LINE = 'measure-line';
+const MEASURE_POINTS = 'measure-points';
+const MEASURE_LABEL = 'measure-label';
+
+S.measure = { active: false, points: [] };
+
+function ensureMeasureLayers() {
+  if (S.map.getSource(MEASURE_SOURCE)) return;
+  S.map.addSource(MEASURE_SOURCE, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  });
+  S.map.addLayer({
+    id: MEASURE_LINE,
+    type: 'line',
+    source: MEASURE_SOURCE,
+    filter: ['==', ['geometry-type'], 'LineString'],
+    paint: {
+      'line-color': '#FFD93D',
+      'line-width': 2.5,
+      'line-dasharray': [2, 1.5],
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+  S.map.addLayer({
+    id: MEASURE_POINTS,
+    type: 'circle',
+    source: MEASURE_SOURCE,
+    filter: ['==', ['geometry-type'], 'Point'],
+    paint: {
+      'circle-radius': 5,
+      'circle-color': '#FFD93D',
+      'circle-stroke-color': '#1a1d27',
+      'circle-stroke-width': 2,
+    },
+  });
+  S.map.addLayer({
+    id: MEASURE_LABEL,
+    type: 'symbol',
+    source: MEASURE_SOURCE,
+    filter: ['==', ['geometry-type'], 'Point'],
+    layout: {
+      'text-field': ['coalesce', ['get', 'label'], ''],
+      'text-font': ['Noto Sans Regular', 'Open Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': 11,
+      'text-offset': [0, -1.4],
+      'text-anchor': 'bottom',
+      'text-allow-overlap': true,
+    },
+    paint: {
+      'text-color': '#FFD93D',
+      'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-width': 1.5,
+    },
+  });
+}
+
+function refreshMeasureLayer() {
+  if (!S.map.getSource(MEASURE_SOURCE)) return;
+  const features = [];
+  const pts = S.measure.points;
+  let cum = 0;
+  for (let i = 0; i < pts.length; i++) {
+    if (i > 0) cum += haversine(pts[i - 1], pts[i]);
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: pts[i] },
+      properties: { label: i === 0 ? 'start' : `${cum.toFixed(2)} mi` },
+    });
+  }
+  if (pts.length >= 2) {
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: pts },
+      properties: {},
+    });
+  }
+  S.map.getSource(MEASURE_SOURCE).setData({ type: 'FeatureCollection', features });
+}
+
+function setMeasureMode(on) {
+  S.measure.active = on;
+  const btn = $('#btn-measure');
+  if (btn) btn.classList.toggle('active', on);
+  document.body.classList.toggle('measure-mode', on);
+  ensureMeasureLayers();
+  if (!on && S.measure.points.length === 0) {
+    // also hide the readout
+    const r = $('#measure-readout');
+    if (r) r.classList.remove('show');
+  }
+}
+
+function clearMeasure() {
+  S.measure.points = [];
+  refreshMeasureLayer();
+  const r = $('#measure-readout');
+  if (r) r.classList.remove('show');
+}
+
+function addMeasurePoint(lngLat) {
+  S.measure.points.push([lngLat.lng, lngLat.lat]);
+  refreshMeasureLayer();
+  updateMeasureReadout();
+}
+
+function updateMeasureReadout() {
+  const r = $('#measure-readout');
+  if (!r) return;
+  const pts = S.measure.points;
+  if (pts.length < 1) { r.classList.remove('show'); return; }
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += haversine(pts[i - 1], pts[i]);
+  // Bearing of last segment
+  let bearing = '';
+  if (pts.length >= 2) {
+    const a = pts[pts.length - 2], b = pts[pts.length - 1];
+    const dy = b[1] - a[1], dx = b[0] - a[0];
+    const bd = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+    bearing = ` · ${bd.toFixed(0)}°`;
+  }
+  r.classList.add('show');
+  r.innerHTML = pts.length === 1
+    ? `<span class="m-label">measure</span> <span class="m-val">click to add points · double-click to finish</span>`
+    : `<span class="m-label">distance</span> <span class="m-val">${total.toFixed(2)} mi${bearing}</span> <span class="m-pts">(${pts.length} pts)</span> <button id="btn-measure-clear">×</button>`;
+  const clear = $('#btn-measure-clear');
+  if (clear) clear.onclick = clearMeasure;
+}
+
+// ============================================================
 // GPX LOADING
 // ============================================================
 async function loadGPXFile(file) {
@@ -2513,49 +2779,118 @@ function loadGPXText(text, defaultName, source) {
     return null;
   }
 
-  // Take name from GPX metadata if available
-  const metaName = dom.querySelector('metadata > name')?.textContent
-    || dom.querySelector('trk > name')?.textContent
-    || defaultName;
-
-  // Combine all features into one logical "track" for stats
-  // but keep the GeoJSON intact for rendering
-  const allCoords = [];
-  let lineCount = 0;
-  let wptCount = 0;
+  // Split each <trk> / <rte> into its own sidebar entry. Waypoints get
+  // collected into a single companion "<file> waypoints" entry per file
+  // (otherwise a file with 100 POIs would dump 100 sidebar rows).
+  const fileBase = defaultName || 'gpx';
+  const lineFeatures = [];
+  const wptFeatures = [];
   for (const f of fc.features) {
-    if (f.geometry.type === 'LineString') {
-      lineCount++;
-      for (const c of f.geometry.coordinates) allCoords.push(c);
-    } else if (f.geometry.type === 'MultiLineString') {
-      lineCount++;
-      for (const line of f.geometry.coordinates)
-        for (const c of line) allCoords.push(c);
-    } else if (f.geometry.type === 'Point') {
-      wptCount++;
-      // classify so styling can differentiate camps / peaks / water / etc.
-      f.properties = f.properties || {};
-      f.properties._kind = classifyWaypoint(f.properties);
-    } else if (f.geometry.type === 'MultiPoint') {
-      wptCount += f.geometry.coordinates.length;
-      f.properties = f.properties || {};
-      f.properties._kind = classifyWaypoint(f.properties);
+    if (f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString') {
+      lineFeatures.push(f);
+    } else if (f.geometry.type === 'Point' || f.geometry.type === 'MultiPoint') {
+      wptFeatures.push(f);
     }
   }
 
-  const stats = calcStats(allCoords);
-  stats.wptCount = wptCount;
-  stats.lineCount = lineCount;
-  const id = 'trk-' + uid();
-  const color = nextTrackColor();
-  const track = { id, name: metaName, color, geojson: fc, stats, source, allCoords };
+  const created = [];
 
-  S.tracks.set(id, track);
-  renderTrackOnMap(track);
+  // One track per line feature. Each gets its own GeoJSON, color, stats.
+  for (let i = 0; i < lineFeatures.length; i++) {
+    const f = lineFeatures[i];
+    const featName = (f.properties && f.properties.name)
+      || (lineFeatures.length === 1 ? fileBase : `${fileBase} #${i + 1}`);
+    const allCoords = [];
+    if (f.geometry.type === 'LineString') {
+      for (const c of f.geometry.coordinates) allCoords.push(c);
+    } else {
+      for (const line of f.geometry.coordinates)
+        for (const c of line) allCoords.push(c);
+    }
+    const stats = calcStats(allCoords);
+    stats.wptCount = 0;
+    stats.lineCount = 1;
+    const t = {
+      id: 'trk-' + uid(),
+      name: featName,
+      color: nextTrackColor(),
+      geojson: { type: 'FeatureCollection', features: [f] },
+      stats,
+      source,
+      allCoords,
+      groupSource: source,
+    };
+    S.tracks.set(t.id, t);
+    renderTrackOnMap(t);
+    created.push(t);
+  }
+
+  // Single combined waypoints entry if the file has any. Classification runs
+  // once per waypoint here so popup/styling logic downstream doesn't have to.
+  if (wptFeatures.length) {
+    let wptCount = 0;
+    for (const f of wptFeatures) {
+      f.properties = f.properties || {};
+      f.properties._kind = classifyWaypoint(f.properties);
+      wptCount += f.geometry.type === 'MultiPoint' ? f.geometry.coordinates.length : 1;
+    }
+    const wptName = lineFeatures.length === 0 ? fileBase : `${fileBase} — waypoints`;
+    const stats = { distance: 0, gain: 0, loss: 0, maxEle: 0, minEle: 0, wptCount, lineCount: 0 };
+    const t = {
+      id: 'trk-' + uid(),
+      name: wptName,
+      color: '#FFD93D', // distinct yellow so waypoint groups stand out in the sidebar
+      geojson: { type: 'FeatureCollection', features: wptFeatures },
+      stats,
+      source,
+      allCoords: [],
+      groupSource: source,
+      isWaypointGroup: true,
+    };
+    S.tracks.set(t.id, t);
+    renderTrackOnMap(t);
+    created.push(t);
+  }
+
   buildTracksUI();
   Store.saveTracks();
-  fitTrack(track);
-  return track;
+  if (created.length) {
+    // Fit to all created features from this file together
+    fitTracks(created);
+  }
+  // Return the first track for backward compat with single-track callers
+  // (we attach the full list via .siblings so manifest loader can pin all).
+  if (created.length) {
+    created[0].siblings = created;
+  }
+  return created[0] || null;
+}
+
+// Compute joint bounds of multiple tracks and pan-zoom to fit
+function fitTracks(tracks) {
+  let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  let any = false;
+  const visit = (c) => {
+    any = true;
+    if (c[0] < minLng) minLng = c[0];
+    if (c[0] > maxLng) maxLng = c[0];
+    if (c[1] < minLat) minLat = c[1];
+    if (c[1] > maxLat) maxLat = c[1];
+  };
+  for (const t of tracks) {
+    for (const c of t.allCoords) visit(c);
+    for (const f of t.geojson.features) {
+      if (f.geometry.type === 'Point') visit(f.geometry.coordinates);
+      else if (f.geometry.type === 'MultiPoint')
+        for (const c of f.geometry.coordinates) visit(c);
+    }
+  }
+  if (!any) return;
+  if (Math.abs(maxLng - minLng) < 0.001 && Math.abs(maxLat - minLat) < 0.001) {
+    const pad = 0.01;
+    minLng -= pad; maxLng += pad; minLat -= pad; maxLat += pad;
+  }
+  S.map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 900, maxZoom: 14 });
 }
 
 // Classify a waypoint by its <sym>, <type>, or name. Matches a small set of
@@ -3450,6 +3785,27 @@ function wireControls() {
     setPinMode(!S.pinMode);
     if (S.pinMode) toast('Pin mode: click on the map to drop a pin (Esc to cancel)', 'info');
   };
+  $('#btn-measure').onclick = () => {
+    const on = !S.measure.active;
+    if (on) clearMeasure();
+    setMeasureMode(on);
+    updateMeasureReadout();
+    if (on) toast('Measure: click to add points, double-click to finish, Esc to clear', 'info');
+  };
+
+  // Click coordinates to copy
+  $('#copy-coords').onclick = () => {
+    const lat = $('#stat-lat').textContent;
+    const lng = $('#stat-lng').textContent;
+    if (lat === '—' || lng === '—') return;
+    const text = `${lat}, ${lng}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => toast(`Copied: ${text}`, 'success', 1800),
+        () => toast('Could not copy', 'error', 1500)
+      );
+    }
+  };
 
   $('#btn-load-gpx').onclick = () => $('#file-input').click();
   $('#file-input').addEventListener('change', async (e) => {
@@ -3501,6 +3857,7 @@ function wireControls() {
     if (e.key === '3') setTerrain(!S.terrain);
     else if (e.key === 'f' || e.key === 'F') $('#btn-fullscreen').click();
     else if (e.key === 'p' || e.key === 'P') $('#btn-pin').click();
+    else if (e.key === 'm' || e.key === 'M') $('#btn-measure').click();
     else if (e.key === '/') {
       e.preventDefault();
       $('#search-input').focus();
@@ -3510,6 +3867,10 @@ function wireControls() {
       hideElevation();
       if (S.weatherMarker) { S.weatherMarker.remove(); S.weatherMarker = null; }
       if (S.pinMode) setPinMode(false);
+      if (S.measure.active || S.measure.points.length) {
+        setMeasureMode(false);
+        clearMeasure();
+      }
     } else if (e.key === 'b' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
       $('#sidebar-toggle').click();
@@ -3542,24 +3903,41 @@ async function tryManifest() {
       const name = typeof entry === 'string' ? null : entry.name;
       if (!file) continue;
       const url = `./gpx/${file}`;
-      // Dedupe: if a track with this source URL is already loaded
-      // (e.g. restored from localStorage somehow), drop it first so the
-      // manifest version is the authoritative one.
+      // Dedupe: if any tracks with this source URL are already loaded
+      // (e.g. restored from localStorage somehow), remove them properly so
+      // the manifest version is the authoritative one. A single source URL
+      // may now produce multiple sibling tracks, so we collect-then-remove.
+      const dupeIds = [];
       for (const [id, t] of S.tracks) {
-        if (t.source === url || t.source === file) { S.tracks.delete(id); }
+        if (t.source === url || t.source === file) dupeIds.push(id);
+      }
+      for (const id of dupeIds) {
+        const t = S.tracks.get(id);
+        if (!t) continue;
+        // Remove all map layers + sources for this track
+        for (const layerId of t.layerIds || []) if (S.map.getLayer(layerId)) S.map.removeLayer(layerId);
+        if (S.map.getSource(`track-${id}`)) S.map.removeSource(`track-${id}`);
+        if (S.map.getSource(`track-${id}-pins`)) S.map.removeSource(`track-${id}-pins`);
+        if (S.map.getSource(`track-${id}-wpt-src`)) S.map.removeSource(`track-${id}-wpt-src`);
+        S.tracks.delete(id);
       }
       const t = await loadGPXFromURL(url, name);
       if (t) {
-        t.pinned = true;
-        // Apply any user-saved style overrides for this file
+        // A single GPX file can produce multiple sibling tracks now.
+        // Pin them all and apply persisted style overrides (keyed by source URL,
+        // shared across siblings since they came from the same file).
+        const all = t.siblings || [t];
         const ov = styleOverrides[url];
-        if (ov) {
-          if (ov.color) setTrackColor(t.id, ov.color);
-          if (ov.lineWidth) setTrackLineWidth(t.id, ov.lineWidth);
-          if (ov.opacity != null) setTrackOpacity(t.id, ov.opacity);
-          if (ov.visible === false) setTrackVisible(t.id, false);
+        for (const sib of all) {
+          sib.pinned = true;
+          if (ov) {
+            if (ov.color) setTrackColor(sib.id, ov.color);
+            if (ov.lineWidth) setTrackLineWidth(sib.id, ov.lineWidth);
+            if (ov.opacity != null) setTrackOpacity(sib.id, ov.opacity);
+            if (ov.visible === false) setTrackVisible(sib.id, false);
+          }
         }
-        loaded++;
+        loaded += all.length;
       }
     }
     if (loaded > 0) {
