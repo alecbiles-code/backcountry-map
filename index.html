@@ -1,0 +1,3154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#0a0c12" />
+<title>Backcountry — Self-hosted GPX & terrain map</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<!-- MapLibre -->
+<link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+
+<!-- Chart.js for elevation profile -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
+
+<style>
+  :root {
+    --bg-deep: #0a0c12;
+    --bg-sidebar: #0f1117;
+    --bg-card: #181b25;
+    --bg-elevated: #1f2330;
+    --bg-glass: rgba(15, 17, 23, 0.72);
+    --border: #232733;
+    --border-strong: #2d3243;
+    --text: #e8eaf0;
+    --text-dim: #8b92a6;
+    --text-muted: #5a6178;
+    --accent: #FF6B35;
+    --accent-soft: #ff8758;
+    --accent-glow: rgba(255, 107, 53, 0.35);
+    --cold: #4A9EFF;
+    --cold-glow: rgba(74, 158, 255, 0.35);
+    --success: #6BCB77;
+    --warning: #FFD93D;
+    --danger: #FF6B9D;
+
+    --font-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+    --r-sm: 6px;
+    --r-md: 10px;
+    --r-lg: 14px;
+
+    --shadow-sm: 0 2px 8px rgba(0,0,0,0.35);
+    --shadow-md: 0 8px 24px rgba(0,0,0,0.45);
+    --shadow-lg: 0 16px 48px rgba(0,0,0,0.55);
+
+    --sidebar-w: 340px;
+    --t-fast: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+    --t-med: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+    --t-slow: 480ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  button, input, select { font-family: inherit; color: inherit; }
+  button { cursor: pointer; border: none; background: none; }
+
+  /* === LAYOUT === */
+  #app {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    width: 100vw; height: 100vh;
+    transition: grid-template-columns var(--t-med);
+  }
+  #app.sidebar-collapsed { grid-template-columns: 0 1fr; }
+  #app.sidebar-collapsed #sidebar { transform: translateX(-100%); }
+
+  /* === SIDEBAR === */
+  #sidebar {
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform var(--t-med);
+    position: relative;
+    z-index: 10;
+  }
+
+  /* Topographic line texture overlay on sidebar */
+  #sidebar::before {
+    content: '';
+    position: absolute; inset: 0;
+    background-image:
+      radial-gradient(ellipse 800px 600px at 50% -20%, rgba(255,107,53,0.06), transparent 50%),
+      repeating-linear-gradient(135deg, transparent 0 28px, rgba(255,255,255,0.012) 28px 29px);
+    pointer-events: none;
+  }
+
+  .sidebar-header {
+    padding: 18px 20px 14px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 1;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 16px; letter-spacing: -0.01em;
+  }
+  .brand-mark {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--accent) 0%, #ff4d2e 100%);
+    border-radius: 7px;
+    position: relative;
+    box-shadow: 0 4px 12px var(--accent-glow);
+    flex-shrink: 0;
+  }
+  .brand-mark::after {
+    content: '';
+    position: absolute; inset: 4px;
+    background: var(--bg-sidebar);
+    clip-path: polygon(0 100%, 30% 60%, 50% 75%, 70% 30%, 100% 100%);
+    border-radius: 3px;
+  }
+  .brand-meta {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .sidebar-content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px 12px 80px;
+    position: relative;
+    z-index: 1;
+  }
+  .sidebar-content::-webkit-scrollbar { width: 6px; }
+  .sidebar-content::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-content::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 3px;
+  }
+
+  .panel {
+    margin-bottom: 18px;
+  }
+  .panel-title {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 8px 10px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-weight: 600;
+  }
+  .panel-title .count {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
+  /* === LOAD GPX BUTTON === */
+  .load-gpx {
+    width: 100%;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, var(--accent) 0%, #e85a25 100%);
+    color: white;
+    border-radius: var(--r-md);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: -0.01em;
+    box-shadow: 0 4px 14px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.18);
+    transition: transform var(--t-fast), box-shadow var(--t-fast);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .load-gpx:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 22px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.18);
+  }
+  .load-gpx:active { transform: translateY(0); }
+
+  /* === TRACK ITEM === */
+  .track-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-md);
+    padding: 10px 12px;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all var(--t-fast);
+    position: relative;
+    overflow: hidden;
+  }
+  .track-item:hover {
+    border-color: var(--border-strong);
+    background: var(--bg-elevated);
+  }
+  .track-item.active {
+    border-color: var(--accent);
+    background: var(--bg-elevated);
+    box-shadow: 0 0 0 1px var(--accent), 0 4px 14px rgba(0,0,0,0.4);
+  }
+  .track-item-color {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+  .track-item-name {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+    padding-left: 8px;
+    color: var(--text);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .track-item-stats {
+    display: flex;
+    gap: 12px;
+    padding-left: 8px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+  }
+  .track-item-stat { display: flex; gap: 3px; align-items: baseline; }
+  .track-item-stat .label { color: var(--text-muted); font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .track-item-actions {
+    position: absolute;
+    top: 8px; right: 8px;
+    display: flex; gap: 4px;
+    opacity: 0;
+    transition: opacity var(--t-fast);
+  }
+  .track-item:hover .track-item-actions, .track-item.active .track-item-actions { opacity: 1; }
+  .track-act {
+    width: 22px; height: 22px;
+    border-radius: 5px;
+    background: rgba(0,0,0,0.4);
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all var(--t-fast);
+  }
+  .track-act:hover { background: rgba(0,0,0,0.7); color: var(--text); }
+  .track-act.danger:hover { color: var(--danger); }
+
+  .empty-state {
+    padding: 24px 16px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    border: 1px dashed var(--border);
+    border-radius: var(--r-md);
+  }
+
+  /* === LAYER TOGGLES === */
+  .layer-toggle {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 10px;
+    border-radius: var(--r-sm);
+    cursor: pointer;
+    transition: background var(--t-fast);
+    user-select: none;
+  }
+  .layer-toggle:hover { background: var(--bg-card); }
+  .layer-swatch {
+    width: 14px; height: 14px;
+    border-radius: 3px;
+    border: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+  }
+  .layer-label { flex: 1; font-size: 13px; }
+  .layer-label .sub {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 9.5px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  /* Toggle switch */
+  .switch {
+    width: 32px; height: 18px;
+    background: var(--border);
+    border-radius: 999px;
+    position: relative;
+    transition: background var(--t-fast);
+    flex-shrink: 0;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 14px; height: 14px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: all var(--t-fast);
+  }
+  .layer-toggle.on .switch { background: var(--accent); }
+  .layer-toggle.on .switch::after { left: 16px; background: white; }
+
+  /* === BASEMAP SWITCHER (in sidebar) === */
+  .basemap-row {
+    display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px;
+  }
+  .basemap-btn {
+    padding: 8px 6px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 11px;
+    color: var(--text-dim);
+    transition: all var(--t-fast);
+    text-align: center;
+    font-weight: 500;
+  }
+  .basemap-btn:hover { border-color: var(--border-strong); color: var(--text); }
+  .basemap-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+    font-weight: 600;
+  }
+
+  /* === MAP === */
+  #map-container {
+    position: relative;
+    overflow: hidden;
+  }
+  #map {
+    position: absolute; inset: 0;
+    background: #050709;
+  }
+
+  /* MapLibre control overrides */
+  .maplibregl-ctrl-bottom-right, .maplibregl-ctrl-bottom-left { display: none; }
+  .maplibregl-popup { z-index: 5; }
+  .maplibregl-popup-content {
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    color: var(--text);
+    padding: 12px 14px;
+    box-shadow: var(--shadow-md);
+    font-family: var(--font-sans);
+  }
+  .maplibregl-popup-tip { display: none; }
+  .maplibregl-popup-close-button {
+    color: var(--text-dim);
+    font-size: 18px;
+    padding: 2px 6px;
+    right: 4px; top: 4px;
+  }
+  .maplibregl-popup-close-button:hover { background: transparent; color: var(--text); }
+
+  /* === FLOATING UI ON MAP === */
+  .map-overlay {
+    position: absolute;
+    z-index: 4;
+    pointer-events: none;
+  }
+  .map-overlay > * { pointer-events: auto; }
+
+  /* Top bar */
+  .top-bar {
+    top: 16px; left: 16px; right: 16px;
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  .top-bar > * { pointer-events: auto; }
+
+  /* Sidebar toggle on map */
+  .sidebar-toggle {
+    width: 40px; height: 40px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-sm);
+    flex-shrink: 0;
+    transition: all var(--t-fast);
+  }
+  .sidebar-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Search */
+  .search-wrap {
+    flex: 1;
+    max-width: 460px;
+    position: relative;
+  }
+  .search-input {
+    width: 100%;
+    padding: 10px 14px 10px 38px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    font-size: 13px;
+    color: var(--text);
+    box-shadow: var(--shadow-sm);
+    transition: border-color var(--t-fast);
+    outline: none;
+  }
+  .search-input::placeholder { color: var(--text-muted); }
+  .search-input:focus { border-color: var(--accent); }
+  .search-icon {
+    position: absolute;
+    left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+  .search-results {
+    position: absolute;
+    top: calc(100% + 6px); left: 0; right: 0;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-md);
+    max-height: 280px;
+    overflow-y: auto;
+    display: none;
+  }
+  .search-results.show { display: block; }
+  .search-result {
+    padding: 10px 14px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+    transition: background var(--t-fast);
+  }
+  .search-result:last-child { border-bottom: none; }
+  .search-result:hover { background: rgba(255,255,255,0.04); }
+  .search-result .sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  /* Map controls (right side) */
+  .map-controls {
+    position: absolute;
+    top: 72px; right: 16px;
+    display: flex; flex-direction: column; gap: 6px;
+    z-index: 4;
+  }
+  .map-ctrl {
+    width: 40px; height: 40px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    color: var(--text);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: var(--shadow-sm);
+    transition: all var(--t-fast);
+    pointer-events: auto;
+  }
+  .map-ctrl:hover { border-color: var(--accent); color: var(--accent); }
+  .map-ctrl.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .map-ctrl-group {
+    display: flex; flex-direction: column;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .map-ctrl-group .map-ctrl {
+    background: transparent;
+    backdrop-filter: none;
+    border: none;
+    border-radius: 0;
+    border-bottom: 1px solid var(--border);
+    box-shadow: none;
+    width: 40px; height: 40px;
+  }
+  .map-ctrl-group .map-ctrl:last-child { border-bottom: none; }
+  .map-ctrl-group .map-ctrl:hover {
+    background: rgba(255,255,255,0.05);
+    color: var(--accent);
+  }
+  .map-ctrl-group .map-ctrl.active {
+    background: var(--accent);
+    color: white;
+  }
+
+  /* === WEATHER PANEL === */
+  .weather-panel {
+    position: absolute;
+    top: 16px; right: 70px;
+    width: 320px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    z-index: 5;
+    transform: translateX(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--t-med), transform var(--t-med);
+  }
+  .weather-panel.show {
+    opacity: 1; transform: translateX(0);
+    pointer-events: auto;
+  }
+  .weather-header {
+    padding: 14px 16px 10px;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    border-bottom: 1px solid var(--border);
+  }
+  .weather-loc {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+  }
+  .weather-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  .weather-close {
+    color: var(--text-dim);
+    width: 24px; height: 24px;
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    transition: all var(--t-fast);
+    margin: -4px -4px 0 0;
+  }
+  .weather-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+
+  .weather-current {
+    padding: 18px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: linear-gradient(180deg, rgba(74,158,255,0.06) 0%, transparent 100%);
+  }
+  .weather-icon-big { font-size: 56px; line-height: 1; flex-shrink: 0; }
+  .weather-temp-big {
+    font-size: 38px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    font-family: var(--font-mono);
+  }
+  .weather-cond {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+  .weather-meta {
+    display: flex;
+    gap: 12px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+  }
+  .weather-meta .item {
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .weather-meta .lbl { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .weather-meta .val { color: var(--text); font-weight: 500; font-size: 11px; }
+
+  .weather-forecast {
+    padding: 8px 8px 12px;
+    border-top: 1px solid var(--border);
+  }
+  .forecast-row {
+    display: grid;
+    grid-template-columns: 38px 28px 1fr 60px;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: var(--r-sm);
+  }
+  .forecast-row:hover { background: rgba(255,255,255,0.03); }
+  .forecast-day { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
+  .forecast-icon { font-size: 18px; text-align: center; }
+  .forecast-bar {
+    height: 5px; background: var(--bg-card);
+    border-radius: 999px;
+    position: relative;
+    overflow: hidden;
+  }
+  .forecast-bar-fill {
+    position: absolute;
+    height: 100%;
+    background: linear-gradient(90deg, var(--cold), var(--accent));
+    border-radius: 999px;
+  }
+  .forecast-temps {
+    text-align: right;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .forecast-hi { color: var(--text); font-weight: 600; }
+  .forecast-lo { color: var(--text-muted); margin-left: 4px; }
+  .forecast-precip {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--cold);
+    margin-left: 4px;
+  }
+
+  .avalanche-link {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 16px;
+    background: linear-gradient(90deg, rgba(255,107,53,0.08), transparent);
+    border-top: 1px solid var(--border);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: background var(--t-fast);
+  }
+  .avalanche-link:hover { background: linear-gradient(90deg, rgba(255,107,53,0.15), rgba(255,107,53,0.04)); }
+  .avalanche-link .ext { margin-left: auto; opacity: 0.6; }
+
+  .weather-loading {
+    padding: 40px 16px;
+    text-align: center;
+    color: var(--text-dim);
+  }
+  .spinner {
+    width: 28px; height: 28px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    margin: 0 auto 10px;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* === ELEVATION PROFILE === */
+  .elevation-panel {
+    position: absolute;
+    bottom: 32px; left: 16px; right: 16px;
+    height: 200px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 4;
+    transform: translateY(220px);
+    transition: transform var(--t-med);
+    overflow: hidden;
+  }
+  .elevation-panel.show { transform: translateY(0); }
+  .elevation-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .elevation-title {
+    font-size: 12px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .elevation-title .swatch {
+    width: 10px; height: 10px; border-radius: 2px;
+  }
+  .elevation-stats {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex; gap: 14px;
+  }
+  .elevation-stats .stat .v { color: var(--text); font-weight: 600; margin-left: 3px; }
+  .elevation-canvas-wrap {
+    height: calc(100% - 38px);
+    padding: 4px 8px 6px;
+    position: relative;
+  }
+  .elevation-readout {
+    position: absolute;
+    top: 8px; left: 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text);
+    background: rgba(0,0,0,0.6);
+    padding: 4px 8px;
+    border-radius: 5px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--t-fast);
+  }
+  .elevation-readout.show { opacity: 1; }
+
+  /* === STATUS BAR === */
+  .status-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 28px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    z-index: 3;
+    gap: 18px;
+  }
+  .status-item { display: flex; gap: 6px; }
+  .status-item .lbl { color: var(--text-muted); }
+  .status-item .v { color: var(--text); }
+  .status-spacer { flex: 1; }
+
+  /* === SCALE BAR (custom) === */
+  .scale-bar {
+    position: absolute;
+    bottom: 38px; left: 16px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 4px 8px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    z-index: 3;
+    user-select: none;
+  }
+  .scale-bar-line {
+    height: 4px;
+    background: var(--text);
+    margin-top: 2px;
+    border-left: 1px solid var(--text);
+    border-right: 1px solid var(--text);
+    border-bottom: 1px solid var(--text);
+  }
+
+  /* === NORTH ARROW === */
+  .north-arrow {
+    position: absolute;
+    bottom: 38px; right: 16px;
+    width: 36px; height: 36px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    z-index: 3;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform var(--t-fast);
+  }
+  .north-arrow svg { color: var(--text); }
+  .north-arrow .n-marker {
+    fill: var(--accent);
+  }
+
+  /* === LEGEND === */
+  .legend {
+    position: absolute;
+    bottom: 38px; left: 110px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    padding: 8px 10px;
+    font-size: 11px;
+    color: var(--text);
+    z-index: 3;
+    display: none;
+  }
+  .legend.show { display: block; }
+  .legend-title {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 6px;
+    margin-bottom: 3px;
+  }
+  .legend-item:last-child { margin-bottom: 0; }
+  .legend-swatch {
+    width: 14px; height: 10px; border-radius: 2px;
+    border: 1px solid rgba(255,255,255,0.1);
+  }
+  .legend-swatch.slope-swatch {
+    width: 28px;
+    background: linear-gradient(to right, #888 0%, #d6d690 25%, #e8a040 50%, #c45032 75%, #6e2418 100%);
+  }
+  .legend-sub {
+    font-family: var(--font-mono);
+    color: var(--text-muted);
+    font-size: 9.5px;
+    margin-left: 4px;
+  }
+
+  /* === DRAG OVERLAY === */
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(255,107,53,0.08);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 3px dashed var(--accent);
+    z-index: 100;
+    display: none;
+    align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .drop-overlay.show { display: flex; }
+  .drop-message {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    padding: 24px 32px;
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 600;
+    box-shadow: var(--shadow-lg);
+  }
+
+  /* === TOAST === */
+  .toast-stack {
+    position: absolute;
+    top: 70px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex; flex-direction: column; gap: 8px;
+    pointer-events: none;
+  }
+  .toast {
+    background: var(--bg-glass);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-md);
+    padding: 10px 14px;
+    font-size: 13px;
+    box-shadow: var(--shadow-md);
+    animation: toast-in var(--t-med);
+    max-width: 380px;
+  }
+  .toast.error { border-color: var(--danger); color: var(--danger); }
+  .toast.success { border-color: var(--success); color: var(--success); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(-8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* === KBD === */
+  kbd {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-strong);
+    padding: 1px 5px;
+    border-radius: 4px;
+    color: var(--text-dim);
+  }
+
+  /* === MAP POPUP STYLES === */
+  .track-popup-name { font-weight: 600; font-size: 13px; margin-bottom: 6px; }
+  .track-popup-stats {
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    color: var(--text-dim);
+    display: grid; grid-template-columns: auto auto; gap: 4px 12px;
+  }
+  .track-popup-stats .lbl { color: var(--text-muted); }
+
+  /* === WAYPOINT POPUP === */
+  .wpt-popup .wpt-name {
+    font-weight: 600; font-size: 13px;
+    color: var(--text); display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    margin-bottom: 4px;
+  }
+  .wpt-popup .wpt-sym {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  .wpt-popup .wpt-desc {
+    font-size: 11.5px; color: var(--text-dim); line-height: 1.45;
+    margin: 4px 0 4px;
+    white-space: pre-wrap;
+  }
+  .wpt-popup .wpt-meta {
+    font-family: var(--font-mono); font-size: 10.5px;
+    color: var(--text-dim); margin-top: 2px;
+  }
+  .wpt-popup .wpt-coords {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-muted); margin-top: 4px;
+  }
+  .wpt-kind {
+    font-size: 9.5px; padding: 1px 6px; border-radius: 8px;
+    text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+    background: rgba(255,255,255,0.08); color: var(--text-dim);
+  }
+  .wpt-kind.kind-camp { background: rgba(255,107,53,0.2); color: #FF6B35; }
+  .wpt-kind.kind-peak { background: rgba(74,158,255,0.2); color: #4A9EFF; }
+  .wpt-kind.kind-water { background: rgba(61,201,245,0.2); color: #3DC9F5; }
+  .wpt-kind.kind-trailhead { background: rgba(255,215,0,0.18); color: #FFD700; }
+  .wpt-kind.kind-view { background: rgba(167,139,250,0.2); color: #A78BFA; }
+  .wpt-kind.kind-food { background: rgba(245,166,35,0.2); color: #F5A623; }
+  .wpt-kind.kind-hazard { background: rgba(255,59,48,0.2); color: #FF3B30; }
+
+  /* === PINNED LIBRARY TRACK === */
+  .track-item.pinned { border-left: 2px solid var(--accent); }
+  .track-pin {
+    font-size: 10px; margin-right: 5px; opacity: 0.7;
+    filter: hue-rotate(0deg);
+  }
+
+  /* === DROP-PIN TOOL === */
+  .map-ctrl.active {
+    background: var(--accent);
+    color: #1a1d27;
+    border-color: var(--accent);
+  }
+  body.pin-mode .maplibregl-canvas { cursor: crosshair !important; }
+  body.pin-mode::after {
+    content: 'Click on the map to drop a pin · Esc to cancel';
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #1a1d27;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    font-weight: 600;
+    padding: 8px 14px;
+    border-radius: 16px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    pointer-events: none;
+    z-index: 50;
+    letter-spacing: 0.02em;
+  }
+  .pin-popup-name {
+    font-weight: 600; font-size: 13px; color: #FFD93D; margin-bottom: 4px;
+  }
+  .pin-popup-coords {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim);
+  }
+  .pin-popup-meta {
+    font-family: var(--font-mono); font-size: 9.5px; color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .pin-popup-delete {
+    margin-top: 8px;
+    background: rgba(255,59,48,0.15);
+    color: #FF3B30;
+    border: 1px solid rgba(255,59,48,0.3);
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    letter-spacing: 0.04em;
+  }
+  .pin-popup-delete:hover {
+    background: rgba(255,59,48,0.25);
+    border-color: rgba(255,59,48,0.5);
+  }
+
+  /* === HOVER MARKER === */
+  .hover-marker {
+    width: 14px; height: 14px;
+    background: var(--accent);
+    border: 2px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 12px var(--accent-glow), 0 2px 6px rgba(0,0,0,0.5);
+    pointer-events: none;
+  }
+  .weather-marker {
+    width: 18px; height: 18px;
+    background: var(--cold);
+    border: 2px solid white;
+    border-radius: 50%;
+    box-shadow: 0 0 16px var(--cold-glow), 0 2px 8px rgba(0,0,0,0.5);
+    cursor: pointer;
+  }
+
+  /* === MOBILE === */
+  @media (max-width: 720px) {
+    :root { --sidebar-w: 100%; }
+    #app {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+    }
+    #sidebar {
+      position: fixed;
+      bottom: 0;
+      left: 0; right: 0;
+      width: 100%;
+      max-height: 70vh;
+      border-right: none;
+      border-top: 1px solid var(--border);
+      border-top-left-radius: 18px;
+      border-top-right-radius: 18px;
+      transform: translateY(calc(100% - 56px));
+      transition: transform var(--t-med);
+      z-index: 20;
+    }
+    #sidebar.open { transform: translateY(0); }
+    .sidebar-header {
+      cursor: pointer;
+      position: relative;
+    }
+    .sidebar-header::before {
+      content: '';
+      position: absolute;
+      top: 6px; left: 50%;
+      transform: translateX(-50%);
+      width: 36px; height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+    }
+    .sidebar-toggle { display: none; }
+    .weather-panel {
+      width: calc(100vw - 32px);
+      right: 16px;
+      top: 70px;
+    }
+    .map-controls { top: 122px; }
+    .top-bar { right: 16px; }
+    .elevation-panel { bottom: 60px; height: 160px; }
+    .legend { left: 16px; bottom: 70px; }
+    .scale-bar { bottom: 64px; }
+    .north-arrow { display: none; }
+  }
+
+  /* Hide elements when sidebar is collapsed */
+  #app.sidebar-collapsed #sidebar { pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- SIDEBAR -->
+  <aside id="sidebar">
+    <div class="sidebar-header" id="sidebar-header">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div>BACKCOUNTRY</div>
+          <div class="brand-meta">v1.0 · self-hosted</div>
+        </div>
+      </div>
+    </div>
+    <div class="sidebar-content">
+      <div class="panel">
+        <button class="load-gpx" id="btn-load-gpx">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          Load GPX File
+        </button>
+        <input type="file" id="file-input" accept=".gpx" multiple style="display:none">
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Tracks <span class="count" id="tracks-count">0</span></div>
+        <div id="tracks-list">
+          <div class="empty-state" id="tracks-empty">
+            Drop GPX files here<br>or click <strong>Load GPX File</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Public Lands</div>
+        <div id="layers-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Terrain</div>
+        <div id="terrain-list"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Basemap</div>
+        <div class="basemap-row" id="basemap-row"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-title">Shortcuts</div>
+        <div style="font-size:11px;color:var(--text-dim);line-height:1.9;padding:0 8px">
+          <div><kbd>3</kbd> toggle 3D terrain</div>
+          <div><kbd>F</kbd> fullscreen</div>
+          <div><kbd>/</kbd> focus search</div>
+          <div><kbd>Esc</kbd> close panels</div>
+          <div><kbd>right-click</kbd> weather here</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAP -->
+  <main id="map-container">
+    <div id="map"></div>
+
+    <!-- Top bar -->
+    <div class="map-overlay top-bar">
+      <button class="sidebar-toggle" id="sidebar-toggle" title="Toggle sidebar (Ctrl+B)">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="6" x2="21" y2="6"/>
+          <line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"/>
+          <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" class="search-input" id="search-input" placeholder="Search a place, peak, or trailhead…" autocomplete="off" />
+        <div class="search-results" id="search-results"></div>
+      </div>
+    </div>
+
+    <!-- Map controls -->
+    <div class="map-controls">
+      <div class="map-ctrl-group">
+        <button class="map-ctrl" id="btn-zoom-in" title="Zoom in">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+        <button class="map-ctrl" id="btn-zoom-out" title="Zoom out">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        </button>
+      </div>
+      <button class="map-ctrl" id="btn-3d" title="Toggle 3D terrain (3)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 20l5-9 4 6 3-4 6 7"/>
+          <path d="M3 20h18"/>
+        </svg>
+      </button>
+      <button class="map-ctrl" id="btn-locate" title="Locate me">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+        </svg>
+      </button>
+      <button class="map-ctrl" id="btn-fullscreen" title="Fullscreen (F)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7V3h4M21 7V3h-4M3 17v4h4M21 17v4h-4"/>
+        </svg>
+      </button>
+      <button class="map-ctrl" id="btn-fit" title="Fit all tracks">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/>
+        </svg>
+      </button>
+      <button class="map-ctrl" id="btn-pin" title="Drop a pin (P)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 22s-7-7.58-7-13a7 7 0 0 1 14 0c0 5.42-7 13-7 13z"/>
+          <circle cx="12" cy="9" r="2.5"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Weather panel -->
+    <div class="weather-panel" id="weather-panel">
+      <div id="weather-content"></div>
+    </div>
+
+    <!-- Elevation profile -->
+    <div class="elevation-panel" id="elevation-panel">
+      <div class="elevation-header">
+        <div class="elevation-title">
+          <span class="swatch" id="elev-swatch"></span>
+          <span id="elev-name"></span>
+        </div>
+        <div class="elevation-stats" id="elev-stats"></div>
+      </div>
+      <div class="elevation-canvas-wrap">
+        <div class="elevation-readout" id="elev-readout"></div>
+        <canvas id="elev-canvas"></canvas>
+      </div>
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <div class="status-item">
+        <span class="lbl">LAT</span>
+        <span class="v" id="stat-lat">—</span>
+      </div>
+      <div class="status-item">
+        <span class="lbl">LNG</span>
+        <span class="v" id="stat-lng">—</span>
+      </div>
+      <div class="status-item">
+        <span class="lbl">ELEV</span>
+        <span class="v" id="stat-ele">—</span>
+      </div>
+      <div class="status-spacer"></div>
+      <div class="status-item">
+        <span class="lbl">ZOOM</span>
+        <span class="v" id="stat-zoom">—</span>
+      </div>
+    </div>
+
+    <!-- Scale bar -->
+    <div class="scale-bar" id="scale-bar">
+      <div id="scale-text">— mi</div>
+      <div class="scale-bar-line" id="scale-line" style="width:80px"></div>
+    </div>
+
+    <!-- North arrow -->
+    <div class="north-arrow" id="north-arrow">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polygon class="n-marker" points="12,3 9,13 12,11 15,13" fill="currentColor"/>
+        <polygon points="12,21 9,11 12,13 15,11" fill="none"/>
+        <text x="12" y="7.5" text-anchor="middle" font-size="6" font-family="DM Sans" font-weight="700" fill="white">N</text>
+      </svg>
+    </div>
+
+    <!-- Legend -->
+    <div class="legend" id="legend">
+      <div class="legend-title">Public Lands</div>
+      <div id="legend-items"></div>
+    </div>
+
+    <!-- Drag overlay -->
+    <div class="drop-overlay" id="drop-overlay">
+      <div class="drop-message">
+        Drop GPX file to add track
+      </div>
+    </div>
+
+    <!-- Toasts -->
+    <div class="toast-stack" id="toast-stack"></div>
+  </main>
+</div>
+
+<script type="module">
+import { gpx } from 'https://esm.sh/@tmcw/togeojson@5';
+
+// ============================================================
+// CONFIG
+// ============================================================
+const CFG = {
+  // Track palette — bright, distinguishable on satellite & topo
+  trackColors: [
+    '#FF6B35', '#4A9EFF', '#FFD93D', '#6BCB77',
+    '#FF6B9D', '#A66DD4', '#FF9F5A', '#56CCF2',
+    '#F2C94C', '#27AE60'
+  ],
+
+  // Public lands ArcGIS REST endpoints — using export images, no API key
+  // These are public services from federal agencies
+  layers: {
+    // Slope angle: USGS 3DEP ImageServer with the "Slope Map" rendering rule.
+    // Renders flat = gray, shallow = yellow, moderate = orange, steep = red-brown.
+    // For backcountry skiing, the avalanche-relevant zone is roughly 30-45° (deep
+    // orange to red-brown). Server-side rendering — no client-side compute needed.
+    slope: {
+      kind: 'arcgis-image',
+      label: 'Slope Angle',
+      sub: 'USGS 3DEP slope map',
+      color: '#FF6B35',
+      url: 'https://elevation.nationalmap.gov/arcgis/rest/services/3DEPElevation/ImageServer',
+      renderingRule: { rasterFunction: 'Slope Map' },
+      opacity: 0.55,
+      attribution: 'USGS 3DEP',
+    },
+    // Trails: Waymarked Trails (OpenStreetMap-based hiking routes), free public XYZ.
+    trails: {
+      kind: 'xyz',
+      label: 'Hiking Trails',
+      sub: 'OSM Waymarked',
+      color: '#dd5050',
+      url: 'https://tile.waymarkedtrails.org/hiking/{z}/{x}/{y}.png',
+      opacity: 0.85,
+      maxzoom: 18,
+      attribution: '<a href="https://hiking.waymarkedtrails.org/">Waymarked Trails</a> · <a href="https://www.openstreetmap.org/copyright">© OSM</a>',
+    },
+
+    // Forests / BLM / Parks all come from USGS PAD-US (Federal Fee Managers, authoritative)
+    // with server-side filtering by Manager Name. PAD-US is the canonical inventory of
+    // US protected lands and renders at all useful zoom levels (no minScale gotchas
+    // like the BLM_Natl_SMA_LimitedScale service has).
+    forests: {
+      kind: 'arcgis-export',
+      label: 'National Forests',
+      color: '#3d6b46',
+      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
+      layers: 'show:0',
+      layerDefs: { 0: "Mang_Name = 'USFS'" },
+      opacity: 0.45,
+    },
+    blm: {
+      kind: 'arcgis-export',
+      label: 'BLM Land',
+      color: '#d4a017',
+      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
+      layers: 'show:0',
+      layerDefs: { 0: "Mang_Name = 'BLM'" },
+      opacity: 0.45,
+    },
+    parks: {
+      kind: 'arcgis-export',
+      label: 'National Parks',
+      color: '#1f5132',
+      url: 'https://gis1.usgs.gov/arcgis/rest/services/padus3/Federal_Fee_Managers_Authoritative/MapServer',
+      layers: 'show:0',
+      layerDefs: { 0: "Mang_Name = 'NPS'" },
+      opacity: 0.55,
+    },
+    wilderness: {
+      kind: 'arcgis-export',
+      label: 'Wilderness Areas',
+      color: '#7a3f9e',
+      url: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_Wilderness_01/MapServer',
+      layers: 'show:0',
+      opacity: 0.5,
+    },
+  },
+
+  basemaps: {
+    topo: {
+      label: 'Topo',
+      style: 'https://tiles.openfreemap.org/styles/liberty',
+    },
+    sat: {
+      label: 'Satellite',
+      sources: {
+        sat: {
+          type: 'raster',
+          tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: '© Esri, Maxar, Earthstar Geographics',
+        },
+        labels: {
+          type: 'raster',
+          tiles: ['https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}'],
+          tileSize: 256,
+          maxzoom: 17,
+        },
+      },
+      layers: [
+        { id: 'sat', type: 'raster', source: 'sat' },
+        { id: 'labels', type: 'raster', source: 'labels', paint: { 'raster-opacity': 0.85 } },
+      ],
+    },
+    dark: {
+      label: 'Dark',
+      sources: {
+        carto: {
+          type: 'raster',
+          tiles: [
+            'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+            'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+            'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png',
+          ],
+          tileSize: 256,
+          maxzoom: 19,
+          attribution: '© OpenStreetMap, © CARTO',
+        },
+      },
+      layers: [{ id: 'carto', type: 'raster', source: 'carto' }],
+    },
+  },
+
+  // AWS Open Data Terrarium DEM tiles — free, no key
+  terrainTiles: 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png',
+
+  defaultCenter: [-105.5, 39.5], // Colorado Front Range
+  defaultZoom: 7,
+};
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  map: null,
+  tracks: new Map(),         // id -> { id, name, color, geojson, stats, sourceId, layerIds[] }
+  layers: { slope: false, trails: false, forests: false, blm: false, parks: false, wilderness: false },
+  basemap: 'topo',
+  terrain: false,
+  hillshade: false,
+  selectedTrackId: null,
+  weatherMarker: null,
+  hoverMarker: null,
+  elevChart: null,
+  elevTrackId: null,
+  searchAbort: null,
+  trackColorIdx: 0,
+  fileInput: null,
+  pins: [],                  // [{id, lng, lat, name, kind, ts}]
+  pinMode: false,            // when true, next click drops a pin
+};
+
+// ============================================================
+// DOM
+// ============================================================
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
+
+// ============================================================
+// UTILS
+// ============================================================
+const fmt = {
+  dist(meters) { return (meters * 0.000621371).toFixed(1); },        // mi
+  ele(meters)  { return Math.round(meters * 3.28084).toLocaleString(); }, // ft
+  temp(c)      { return Math.round(c * 9/5 + 32); },                 // °F
+  wind(kmh)    { return Math.round(kmh * 0.621371); },               // mph
+  snow(cm)     { return (cm * 0.393701).toFixed(1); },               // inches
+  ll(n, d=4)   { return n.toFixed(d); },
+};
+
+function uid() { return Math.random().toString(36).slice(2, 10); }
+
+function haversine(a, b) {
+  const R = 6371000; // m
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(b[1] - a[1]);
+  const dLon = toRad(b[0] - a[0]);
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const x = Math.sin(dLat/2)**2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+
+// Moving average smoothing — reduces GPS noise in elevation
+function smoothArray(arr, window = 5) {
+  const out = new Array(arr.length);
+  const half = Math.floor(window / 2);
+  for (let i = 0; i < arr.length; i++) {
+    let sum = 0, n = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(arr.length - 1, i + half); j++) {
+      if (typeof arr[j] === 'number' && !isNaN(arr[j])) { sum += arr[j]; n++; }
+    }
+    out[i] = n ? sum / n : arr[i];
+  }
+  return out;
+}
+
+// Compute track stats with smoothed elevation and noise threshold
+function calcStats(coords) {
+  if (!coords || coords.length < 2) {
+    return { distance: 0, gain: 0, loss: 0, maxEle: 0, minEle: 0, cumDist: [], smoothEle: [] };
+  }
+  const eles = coords.map(c => (c[2] != null ? c[2] : 0));
+  const smoothEle = smoothArray(eles, 7);
+
+  let distance = 0;
+  let gain = 0, loss = 0;
+  let maxEle = -Infinity, minEle = Infinity;
+  const cumDist = [0];
+  const NOISE = 1.0; // metres — reject tiny changes that are GPS noise
+
+  for (let i = 1; i < coords.length; i++) {
+    distance += haversine(coords[i - 1], coords[i]);
+    cumDist.push(distance);
+    const dEle = smoothEle[i] - smoothEle[i - 1];
+    if (dEle > NOISE) gain += dEle;
+    else if (dEle < -NOISE) loss += -dEle;
+    if (smoothEle[i] > maxEle) maxEle = smoothEle[i];
+    if (smoothEle[i] < minEle) minEle = smoothEle[i];
+  }
+  return { distance, gain, loss, maxEle, minEle, cumDist, smoothEle };
+}
+
+function debounce(fn, ms) {
+  let t;
+  return (...args) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...args), ms);
+  };
+}
+
+function nextTrackColor() {
+  const c = CFG.trackColors[S.trackColorIdx % CFG.trackColors.length];
+  S.trackColorIdx++;
+  return c;
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function toast(msg, type = 'info', ms = 2400) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (type !== 'info' ? ' ' + type : '');
+  el.textContent = msg;
+  $('#toast-stack').appendChild(el);
+  setTimeout(() => {
+    el.style.transition = 'opacity 200ms';
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 200);
+  }, ms);
+}
+
+// ============================================================
+// STORAGE
+// ============================================================
+const Store = {
+  KEY_TRACKS: 'bcm.tracks.v1',
+  KEY_VIEW: 'bcm.view.v1',
+  KEY_SETTINGS: 'bcm.settings.v1',
+  KEY_PINS: 'bcm.pins.v1',
+
+  savePins() {
+    try { localStorage.setItem(this.KEY_PINS, JSON.stringify(S.pins || [])); }
+    catch (e) {}
+  },
+  loadPins() {
+    try {
+      const raw = localStorage.getItem(this.KEY_PINS);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  },
+
+  saveTracks() {
+    try {
+      // Pinned (manifest/library) tracks are always loaded fresh from /gpx/, so
+      // we never persist them to localStorage. Only user-dropped tracks survive
+      // page reload.
+      const arr = [...S.tracks.values()].filter(t => !t.pinned).map(t => ({
+        id: t.id, name: t.name, color: t.color,
+        geojson: t.geojson, stats: { distance: t.stats.distance, gain: t.stats.gain, loss: t.stats.loss, maxEle: t.stats.maxEle, minEle: t.stats.minEle, wptCount: t.stats.wptCount, lineCount: t.stats.lineCount },
+        source: t.source,
+      }));
+      const json = JSON.stringify(arr);
+      // Stay under ~4MB to be polite with localStorage
+      if (json.length < 4_000_000) localStorage.setItem(this.KEY_TRACKS, json);
+    } catch (e) { console.warn('Storage save failed', e); }
+  },
+  loadTracks() {
+    try {
+      const raw = localStorage.getItem(this.KEY_TRACKS);
+      if (!raw) return [];
+      return JSON.parse(raw);
+    } catch (e) { return []; }
+  },
+  saveSettings() {
+    try {
+      localStorage.setItem(this.KEY_SETTINGS, JSON.stringify({
+        layers: S.layers,
+        basemap: S.basemap,
+        terrain: S.terrain,
+        hillshade: S.hillshade,
+      }));
+    } catch (e) {}
+  },
+  loadSettings() {
+    try {
+      const raw = localStorage.getItem(this.KEY_SETTINGS);
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  },
+};
+
+// ============================================================
+// MAP INIT
+// ============================================================
+function buildStyle(basemapKey) {
+  const bm = CFG.basemaps[basemapKey];
+  const style = {
+    version: 8,
+    glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+    sources: {},
+    layers: [],
+  };
+  if (bm.style) {
+    // Style URL — return as-is, MapLibre will fetch it
+    return bm.style;
+  }
+  Object.assign(style.sources, bm.sources);
+  style.layers = [...bm.layers];
+  return style;
+}
+
+async function initMap() {
+  // Parse hash if present: #lat/lng/zoom/pitch/bearing
+  let center = CFG.defaultCenter;
+  let zoom = CFG.defaultZoom;
+  let pitch = 0;
+  let bearing = 0;
+  const h = location.hash.slice(1).split('/');
+  if (h.length >= 3) {
+    const [la, ln, z, p, b] = h.map(parseFloat);
+    if (!isNaN(la) && !isNaN(ln) && !isNaN(z)) {
+      center = [ln, la]; zoom = z;
+      if (!isNaN(p)) pitch = p;
+      if (!isNaN(b)) bearing = b;
+    }
+  } else {
+    const v = Store.loadSettings();
+    if (v?.basemap && CFG.basemaps[v.basemap]) S.basemap = v.basemap;
+  }
+
+  S.map = new maplibregl.Map({
+    container: 'map',
+    style: buildStyle(S.basemap),
+    center, zoom, pitch, bearing,
+    attributionControl: { compact: true },
+    hash: false,
+    maxPitch: 75,
+  });
+
+  S.map.dragRotate.enable();
+  S.map.touchZoomRotate.enableRotation();
+
+  await new Promise(res => S.map.once('load', res));
+
+  // Restore settings after first style is ready
+  const saved = Store.loadSettings();
+  if (saved) {
+    if (saved.terrain) await setTerrain(true);
+    if (saved.hillshade) await setHillshade(true);
+    Object.entries(saved.layers || {}).forEach(([k, v]) => v && setLayer(k, true));
+  }
+
+  S.map.on('move', () => {
+    const c = S.map.getCenter();
+    $('#stat-zoom').textContent = S.map.getZoom().toFixed(2);
+    rotateNorthArrow(S.map.getBearing());
+    updateScaleBar();
+    debouncedSaveHash(c.lat, c.lng, S.map.getZoom(), S.map.getPitch(), S.map.getBearing());
+  });
+
+  S.map.on('mousemove', (e) => {
+    $('#stat-lat').textContent = fmt.ll(e.lngLat.lat);
+    $('#stat-lng').textContent = fmt.ll(e.lngLat.lng);
+    if (S.terrain) {
+      const ele = S.map.queryTerrainElevation(e.lngLat);
+      $('#stat-ele').textContent = ele != null ? fmt.ele(ele) + ' ft' : '—';
+    } else {
+      $('#stat-ele').textContent = '—';
+    }
+  });
+
+  // Right-click for weather (desktop)
+  S.map.on('contextmenu', (e) => {
+    e.preventDefault();
+    showWeatherAt(e.lngLat.lng, e.lngLat.lat);
+  });
+
+  // Pin-mode: a plain click drops a pin. Click on an existing pin is
+  // intercepted by the pin layer's own click handler (which shows a popup),
+  // so we use the generic map click for the empty-space case.
+  S.map.on('click', (e) => {
+    if (!S.pinMode) return;
+    // If the click hit one of the pin layer features, the pin's own handler
+    // already ran — don't drop another. queryRenderedFeatures lets us check.
+    const hit = S.map.queryRenderedFeatures(e.point, { layers: [PIN_LAYER] });
+    if (hit.length) return;
+    dropPin(e.lngLat);
+    setPinMode(false); // one-shot — exit pin mode after drop
+  });
+
+  // Long-press for weather (mobile / touch)
+  let touchTimer = null;
+  let touchStart = null;
+  const cancelLongPress = () => {
+    if (touchTimer) { clearTimeout(touchTimer); touchTimer = null; }
+  };
+  S.map.on('touchstart', (e) => {
+    if (e.points && e.points.length === 1) {
+      const p = e.points[0];
+      touchStart = { x: p.x, y: p.y };
+      const ll = e.lngLat;
+      touchTimer = setTimeout(() => {
+        if (navigator.vibrate) navigator.vibrate(40);
+        showWeatherAt(ll.lng, ll.lat);
+      }, 600);
+    }
+  });
+  S.map.on('touchmove', (e) => {
+    if (!touchStart || !e.points || !e.points.length) return;
+    const p = e.points[0];
+    if (Math.hypot(p.x - touchStart.x, p.y - touchStart.y) > 10) cancelLongPress();
+  });
+  S.map.on('touchend', cancelLongPress);
+  S.map.on('touchcancel', cancelLongPress);
+
+  updateScaleBar();
+}
+
+const debouncedSaveHash = debounce((lat, lng, zoom, pitch, bearing) => {
+  const parts = [lat.toFixed(4), lng.toFixed(4), zoom.toFixed(2)];
+  if (pitch > 0.5) parts.push(pitch.toFixed(0));
+  if (Math.abs(bearing) > 0.5) parts.push(bearing.toFixed(0));
+  history.replaceState(null, '', '#' + parts.join('/'));
+}, 400);
+
+function rotateNorthArrow(bearing) {
+  $('#north-arrow').style.transform = `rotate(${-bearing}deg)`;
+}
+
+function updateScaleBar() {
+  const c = S.map.getCenter();
+  const z = S.map.getZoom();
+  // metres-per-pixel at lat
+  const mPerPx = 156543.03392 * Math.cos(c.lat * Math.PI / 180) / Math.pow(2, z);
+  const targetPx = 80;
+  let metres = mPerPx * targetPx;
+  // Snap to nice round mile values
+  const miles = metres * 0.000621371;
+  const niceMiles = [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 25, 50, 100, 250, 500];
+  let nice = niceMiles[0];
+  for (const v of niceMiles) if (v <= miles) nice = v;
+  const niceMetres = nice / 0.000621371;
+  const px = Math.round(niceMetres / mPerPx);
+  $('#scale-line').style.width = px + 'px';
+  $('#scale-text').textContent = nice < 1 ? `${(nice*5280).toFixed(0)} ft` : `${nice} mi`;
+}
+
+// ============================================================
+// BASEMAP SWITCHING
+// ============================================================
+async function setBasemap(key) {
+  if (S.basemap === key) return;
+  S.basemap = key;
+  $$('#basemap-row .basemap-btn').forEach(b => b.classList.toggle('active', b.dataset.bm === key));
+
+  // Save current state before swapping style
+  const wasTerrain = S.terrain;
+  const wasHillshade = S.hillshade;
+  const wasLayers = { ...S.layers };
+  const trackList = [...S.tracks.values()];
+
+  S.map.setStyle(buildStyle(key));
+  await new Promise(res => S.map.once('styledata', res));
+
+  // Re-add terrain / hillshade / lands / tracks
+  if (wasTerrain) await setTerrain(true, true);
+  if (wasHillshade) await setHillshade(true, true);
+  for (const k of Object.keys(wasLayers)) if (wasLayers[k]) setLayer(k, true, true);
+  for (const t of trackList) renderTrackOnMap(t);
+  // Pin source/layers got nuked along with the style — recreate.
+  ensurePinLayers();
+  refreshPinLayer();
+
+  Store.saveSettings();
+}
+
+function buildBasemapUI() {
+  const row = $('#basemap-row');
+  row.innerHTML = '';
+  for (const [k, v] of Object.entries(CFG.basemaps)) {
+    const btn = document.createElement('button');
+    btn.className = 'basemap-btn' + (S.basemap === k ? ' active' : '');
+    btn.dataset.bm = k;
+    btn.textContent = v.label;
+    btn.onclick = () => setBasemap(k);
+    row.appendChild(btn);
+  }
+}
+
+// ============================================================
+// TERRAIN & HILLSHADE
+// ============================================================
+async function setTerrain(on, force = false) {
+  if (!force && S.terrain === on) return;
+  S.terrain = on;
+  $('#btn-3d').classList.toggle('active', on);
+  $$('#terrain-list .layer-toggle[data-t="3d"]').forEach(el => el.classList.toggle('on', on));
+
+  if (on) {
+    if (!S.map.getSource('terrain-dem')) {
+      S.map.addSource('terrain-dem', {
+        type: 'raster-dem',
+        tiles: [CFG.terrainTiles],
+        tileSize: 256,
+        encoding: 'terrarium',
+        maxzoom: 14,
+      });
+    }
+    S.map.setTerrain({ source: 'terrain-dem', exaggeration: 1.5 });
+    S.map.easeTo({ pitch: 55, duration: 800 });
+  } else {
+    S.map.setTerrain(null);
+    S.map.easeTo({ pitch: 0, duration: 600 });
+  }
+  Store.saveSettings();
+}
+
+async function setHillshade(on, force = false) {
+  if (!force && S.hillshade === on) return;
+  S.hillshade = on;
+  $$('#terrain-list .layer-toggle[data-t="hs"]').forEach(el => el.classList.toggle('on', on));
+
+  if (on) {
+    if (!S.map.getSource('terrain-dem')) {
+      S.map.addSource('terrain-dem', {
+        type: 'raster-dem',
+        tiles: [CFG.terrainTiles],
+        tileSize: 256,
+        encoding: 'terrarium',
+        maxzoom: 14,
+      });
+    }
+    if (!S.map.getLayer('hillshade')) {
+      S.map.addLayer({
+        id: 'hillshade',
+        type: 'hillshade',
+        source: 'terrain-dem',
+        paint: {
+          'hillshade-shadow-color': '#000',
+          'hillshade-highlight-color': '#fff',
+          'hillshade-exaggeration': 0.45,
+        },
+      }, firstSymbolLayerId());
+    }
+  } else {
+    if (S.map.getLayer('hillshade')) S.map.removeLayer('hillshade');
+  }
+  Store.saveSettings();
+}
+
+function firstSymbolLayerId() {
+  const layers = S.map.getStyle().layers;
+  for (const l of layers) if (l.type === 'symbol') return l.id;
+  return undefined;
+}
+
+function buildTerrainUI() {
+  const list = $('#terrain-list');
+  list.innerHTML = '';
+  list.appendChild(makeToggle({
+    label: '3D terrain',
+    sub: 'AWS Terrarium · pitch 55°',
+    color: '#4A9EFF',
+    on: S.terrain,
+    dataT: '3d',
+    onChange: (v) => setTerrain(v),
+  }));
+  list.appendChild(makeToggle({
+    label: 'Hillshade',
+    sub: 'shading from DEM',
+    color: '#8b92a6',
+    on: S.hillshade,
+    dataT: 'hs',
+    onChange: (v) => setHillshade(v),
+  }));
+}
+
+function makeToggle({ label, sub, color, on, dataT, onChange }) {
+  const el = document.createElement('div');
+  el.className = 'layer-toggle' + (on ? ' on' : '');
+  if (dataT) el.dataset.t = dataT;
+  el.innerHTML = `
+    <div class="layer-swatch" style="background:${color}"></div>
+    <div class="layer-label">${label}<span class="sub">${sub}</span></div>
+    <div class="switch"></div>
+  `;
+  el.onclick = () => {
+    const newOn = !el.classList.contains('on');
+    onChange(newOn);
+  };
+  return el;
+}
+
+// ============================================================
+// PUBLIC LANDS LAYERS
+// ============================================================
+// Z-order for the toggleable raster overlays. Earlier = drawn lower.
+// We insert each new layer ABOVE everything before it in this list, and BELOW
+// everything after it. This stops public-lands fills from covering the slope
+// shading or trails when toggle order varies.
+const LANDS_Z_ORDER = ['slope', 'forests', 'blm', 'parks', 'wilderness', 'trails'];
+
+function landsInsertBeforeId(key) {
+  const i = LANDS_Z_ORDER.indexOf(key);
+  for (let j = i + 1; j < LANDS_Z_ORDER.length; j++) {
+    const next = LANDS_Z_ORDER[j];
+    if (S.layers[next] && S.map.getLayer(`lands-${next}`)) return `lands-${next}`;
+  }
+  return firstTrackLayerId() || firstSymbolLayerId();
+}
+
+function setLayer(key, on, force = false) {
+  if (!force && S.layers[key] === on) return;
+  S.layers[key] = on;
+  const tog = document.querySelector(`.layer-toggle[data-key="${key}"]`);
+  if (tog) tog.classList.toggle('on', on);
+
+  const cfg = CFG.layers[key];
+  const sourceId = `lands-${key}`;
+  const layerId = `lands-${key}`;
+
+  if (on) {
+    if (!S.map.getSource(sourceId)) {
+      const kind = cfg.kind || 'arcgis-export';
+      let tileUrl, tileSize, attribution;
+
+      if (kind === 'arcgis-export') {
+        // ArcGIS MapServer dynamic export — used for PAD-US public lands & Wilderness
+        tileUrl = `${cfg.url}/export?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png32&transparent=true&dpi=96&layers=${cfg.layers}&f=image`;
+        if (cfg.layerDefs) tileUrl += `&layerDefs=${encodeURIComponent(JSON.stringify(cfg.layerDefs))}`;
+        tileSize = 512;
+        attribution = cfg.attribution || (cfg.label + ' (public ArcGIS service)');
+      } else if (kind === 'arcgis-image') {
+        // ArcGIS ImageServer with a renderingRule — used for USGS 3DEP slope shading
+        tileUrl = `${cfg.url}/exportImage?bbox={bbox-epsg-3857}&bboxSR=3857&imageSR=3857&size=512,512&format=png&f=image`;
+        if (cfg.renderingRule) tileUrl += `&renderingRule=${encodeURIComponent(JSON.stringify(cfg.renderingRule))}`;
+        tileSize = 512;
+        attribution = cfg.attribution || (cfg.label + ' (public ArcGIS image service)');
+      } else if (kind === 'xyz') {
+        // Plain XYZ tile URL (e.g. Waymarked Trails)
+        tileUrl = cfg.url;
+        tileSize = cfg.tileSize || 256;
+        attribution = cfg.attribution || cfg.label;
+      }
+
+      S.map.addSource(sourceId, {
+        type: 'raster',
+        tiles: [tileUrl],
+        tileSize,
+        attribution,
+        ...(cfg.maxzoom != null ? { maxzoom: cfg.maxzoom } : {}),
+      });
+    }
+    if (!S.map.getLayer(layerId)) {
+      const beforeId = landsInsertBeforeId(key);
+      S.map.addLayer({
+        id: layerId,
+        type: 'raster',
+        source: sourceId,
+        paint: { 'raster-opacity': cfg.opacity },
+      }, beforeId);
+    }
+  } else {
+    if (S.map.getLayer(layerId)) S.map.removeLayer(layerId);
+    if (S.map.getSource(sourceId)) S.map.removeSource(sourceId);
+  }
+  updateLegend();
+  Store.saveSettings();
+}
+
+function firstTrackLayerId() {
+  for (const [, t] of S.tracks) if (t.layerIds?.length) return t.layerIds[0];
+  return null;
+}
+
+function buildLayersUI() {
+  const list = $('#layers-list');
+  list.innerHTML = '';
+  for (const [k, v] of Object.entries(CFG.layers)) {
+    const sub = v.sub || (k === 'wilderness' ? 'USFS Wilderness' : 'USGS PAD-US');
+    const el = makeToggle({
+      label: v.label,
+      sub,
+      color: v.color,
+      on: S.layers[k],
+      onChange: (on) => setLayer(k, on),
+    });
+    el.dataset.key = k;
+    list.appendChild(el);
+  }
+}
+
+function updateLegend() {
+  const active = Object.entries(S.layers).filter(([_, v]) => v);
+  const legend = $('#legend');
+  if (!active.length) { legend.classList.remove('show'); return; }
+  legend.classList.add('show');
+  $('#legend-items').innerHTML = active.map(([k]) => {
+    const c = CFG.layers[k];
+    // Slope gets a gradient swatch matching the USGS Slope Map ramp.
+    if (k === 'slope') {
+      return `<div class="legend-item">
+        <div class="legend-swatch slope-swatch" title="0° gray → 45°+ red-brown"></div>
+        ${c.label}<span class="legend-sub"> 0–60°</span>
+      </div>`;
+    }
+    return `<div class="legend-item"><div class="legend-swatch" style="background:${c.color};opacity:${c.opacity + 0.2}"></div>${c.label}</div>`;
+  }).join('');
+}
+
+// ============================================================
+// PIN DROP TOOL
+// ============================================================
+// Click-to-mark spots on the map. Pins persist across sessions in localStorage,
+// independent of GPX library tracks. Useful for marking quick reference points
+// that aren't worth adding to a GPX file.
+
+const PIN_SOURCE = 'user-pins';
+const PIN_LAYER = 'user-pins-circle';
+const PIN_LABEL_LAYER = 'user-pins-label';
+
+function ensurePinLayers() {
+  if (S.map.getSource(PIN_SOURCE)) return;
+  S.map.addSource(PIN_SOURCE, {
+    type: 'geojson',
+    data: { type: 'FeatureCollection', features: [] },
+  });
+  S.map.addLayer({
+    id: PIN_LAYER,
+    type: 'circle',
+    source: PIN_SOURCE,
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 6, 4, 14, 8, 18, 10],
+      'circle-color': '#FFD93D',
+      'circle-stroke-color': '#1a1d27',
+      'circle-stroke-width': 2.5,
+      'circle-opacity': 0.95,
+    },
+  });
+  S.map.addLayer({
+    id: PIN_LABEL_LAYER,
+    type: 'symbol',
+    source: PIN_SOURCE,
+    minzoom: 10,
+    layout: {
+      'text-field': ['coalesce', ['get', 'name'], ''],
+      'text-font': ['Noto Sans Regular', 'Open Sans Regular', 'Arial Unicode MS Regular'],
+      'text-size': 12,
+      'text-offset': [0, 1.0],
+      'text-anchor': 'top',
+      'text-allow-overlap': false,
+      'text-optional': true,
+      'text-max-width': 10,
+    },
+    paint: {
+      'text-color': '#FFD93D',
+      'text-halo-color': 'rgba(0,0,0,0.85)',
+      'text-halo-width': 1.6,
+    },
+  });
+  // Click → popup with name + delete option
+  S.map.on('click', PIN_LAYER, (e) => {
+    e.preventDefault?.();
+    const f = e.features[0];
+    const id = f.properties.id;
+    const pin = S.pins.find(p => p.id === id);
+    if (!pin) return;
+    const html = `
+      <div class="pin-popup">
+        <div class="pin-popup-name">${escapeHtml(pin.name || 'Pin')}</div>
+        <div class="pin-popup-coords">${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}</div>
+        <div class="pin-popup-meta">${new Date(pin.ts).toLocaleString()}</div>
+        <button class="pin-popup-delete" data-pin-id="${pin.id}">Remove pin</button>
+      </div>`;
+    const popup = new maplibregl.Popup({ offset: 14, className: 'pin-popup-wrap', maxWidth: '240px' })
+      .setLngLat([pin.lng, pin.lat])
+      .setHTML(html)
+      .addTo(S.map);
+    setTimeout(() => {
+      const btn = document.querySelector(`.pin-popup-delete[data-pin-id="${pin.id}"]`);
+      if (btn) btn.onclick = () => { removePin(pin.id); popup.remove(); };
+    }, 0);
+  });
+  S.map.on('mouseenter', PIN_LAYER, () => S.map.getCanvas().style.cursor = 'pointer');
+  S.map.on('mouseleave', PIN_LAYER, () => S.map.getCanvas().style.cursor = S.pinMode ? 'crosshair' : '');
+}
+
+function refreshPinLayer() {
+  if (!S.map.getSource(PIN_SOURCE)) return;
+  S.map.getSource(PIN_SOURCE).setData({
+    type: 'FeatureCollection',
+    features: S.pins.map(p => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      properties: { id: p.id, name: p.name },
+    })),
+  });
+}
+
+function setPinMode(on) {
+  S.pinMode = on;
+  const btn = $('#btn-pin');
+  if (btn) btn.classList.toggle('active', on);
+  S.map.getCanvas().style.cursor = on ? 'crosshair' : '';
+  // Also push the body into a class so CSS can show a hint banner
+  document.body.classList.toggle('pin-mode', on);
+}
+
+function dropPin(lngLat) {
+  // Use a small inline prompt — keeps the flow snappy on desktop and works on
+  // mobile where the prompt() dialog is the easiest text input.
+  const name = (window.prompt('Pin name:', '') || '').trim();
+  if (name === null) return;
+  const pin = {
+    id: 'pin-' + uid(),
+    lng: lngLat.lng,
+    lat: lngLat.lat,
+    name: name || 'Pin',
+    ts: Date.now(),
+  };
+  S.pins.push(pin);
+  Store.savePins();
+  refreshPinLayer();
+}
+
+function removePin(id) {
+  S.pins = S.pins.filter(p => p.id !== id);
+  Store.savePins();
+  refreshPinLayer();
+}
+
+function clearAllPins() {
+  if (!S.pins.length) return;
+  if (!confirm(`Remove all ${S.pins.length} pins?`)) return;
+  S.pins = [];
+  Store.savePins();
+  refreshPinLayer();
+}
+
+// ============================================================
+// GPX LOADING
+// ============================================================
+async function loadGPXFile(file) {
+  const text = await file.text();
+  return loadGPXText(text, file.name.replace(/\.gpx$/i, ''), file.name);
+}
+
+async function loadGPXFromURL(url, displayName) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const text = await r.text();
+    return loadGPXText(text, displayName || url.split('/').pop().replace(/\.gpx$/i, ''), url);
+  } catch (e) {
+    toast(`Failed to load ${displayName || url}: ${e.message}`, 'error');
+    return null;
+  }
+}
+
+function loadGPXText(text, defaultName, source) {
+  let dom;
+  try {
+    dom = new DOMParser().parseFromString(text, 'application/xml');
+    if (dom.querySelector('parsererror')) throw new Error('Invalid XML');
+  } catch (e) {
+    toast('Could not parse GPX: ' + e.message, 'error');
+    return null;
+  }
+  const fc = gpx(dom);
+  if (!fc.features || !fc.features.length) {
+    toast('No tracks or routes found in GPX', 'error');
+    return null;
+  }
+
+  // Take name from GPX metadata if available
+  const metaName = dom.querySelector('metadata > name')?.textContent
+    || dom.querySelector('trk > name')?.textContent
+    || defaultName;
+
+  // Combine all features into one logical "track" for stats
+  // but keep the GeoJSON intact for rendering
+  const allCoords = [];
+  let lineCount = 0;
+  let wptCount = 0;
+  for (const f of fc.features) {
+    if (f.geometry.type === 'LineString') {
+      lineCount++;
+      for (const c of f.geometry.coordinates) allCoords.push(c);
+    } else if (f.geometry.type === 'MultiLineString') {
+      lineCount++;
+      for (const line of f.geometry.coordinates)
+        for (const c of line) allCoords.push(c);
+    } else if (f.geometry.type === 'Point') {
+      wptCount++;
+      // classify so styling can differentiate camps / peaks / water / etc.
+      f.properties = f.properties || {};
+      f.properties._kind = classifyWaypoint(f.properties);
+    } else if (f.geometry.type === 'MultiPoint') {
+      wptCount += f.geometry.coordinates.length;
+      f.properties = f.properties || {};
+      f.properties._kind = classifyWaypoint(f.properties);
+    }
+  }
+
+  const stats = calcStats(allCoords);
+  stats.wptCount = wptCount;
+  stats.lineCount = lineCount;
+  const id = 'trk-' + uid();
+  const color = nextTrackColor();
+  const track = { id, name: metaName, color, geojson: fc, stats, source, allCoords };
+
+  S.tracks.set(id, track);
+  renderTrackOnMap(track);
+  buildTracksUI();
+  Store.saveTracks();
+  fitTrack(track);
+  return track;
+}
+
+// Classify a waypoint by its <sym>, <type>, or name. Matches a small set of
+// common GPS POI categories so we can color-code on the map.
+function classifyWaypoint(props) {
+  const s = ((props.sym || '') + ' ' + (props.type || '') + ' ' + (props.name || '')).toLowerCase();
+  if (/\b(camp|tent|bivvy|bivouac|shelter|hut|lodge|cabin)\b/.test(s)) return 'camp';
+  if (/\b(summit|peak|mountain|pass|saddle|highpoint|13er|14er)\b/.test(s)) return 'peak';
+  if (/\b(water|spring|stream|creek|river|lake|pond|tarn|reservoir|well)\b/.test(s)) return 'water';
+  if (/\b(trail.?head|parking|trailhead|car ?park)\b/.test(s)) return 'trailhead';
+  if (/\b(photo|view|vista|scenic|overlook|lookout)\b/.test(s)) return 'view';
+  if (/\b(danger|warning|hazard|cliff|crevasse|slide)\b/.test(s)) return 'hazard';
+  if (/\b(food|restaurant|store|resupply)\b/.test(s)) return 'food';
+  return 'generic';
+}
+
+function renderTrackOnMap(track) {
+  const sourceId = `track-${track.id}`;
+  const glowId = `${sourceId}-glow`;
+  const lineId = `${sourceId}-line`;
+  const startId = `${sourceId}-start`;
+  const endId = `${sourceId}-end`;
+  const wptId = `${sourceId}-wpt`;
+  const wptLabelId = `${sourceId}-wpt-label`;
+
+  // Remove old if any (for restyle)
+  for (const id of [glowId, lineId, startId, endId, wptId, wptLabelId])
+    if (S.map.getLayer(id)) S.map.removeLayer(id);
+  if (S.map.getSource(sourceId)) S.map.removeSource(sourceId);
+  if (S.map.getSource(sourceId + '-wpt-src')) S.map.removeSource(sourceId + '-wpt-src');
+  if (S.map.getSource(sourceId + '-pins')) S.map.removeSource(sourceId + '-pins');
+
+  S.map.addSource(sourceId, { type: 'geojson', data: track.geojson, lineMetrics: true });
+
+  // Glow underlay (lines only). Filter excludes Points so waypoints don't
+  // get a giant blurred halo applied to them.
+  S.map.addLayer({
+    id: glowId,
+    type: 'line',
+    source: sourceId,
+    filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+    paint: {
+      'line-color': track.color,
+      'line-width': 9,
+      'line-opacity': 0.25,
+      'line-blur': 4,
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+  // Main line
+  S.map.addLayer({
+    id: lineId,
+    type: 'line',
+    source: sourceId,
+    filter: ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]],
+    paint: {
+      'line-color': track.color,
+      'line-width': 3,
+      'line-opacity': 0.95,
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  });
+
+  // ----- Waypoints (Point / MultiPoint) -----
+  // Pulled into a separate source so we can size them, color them by `_kind`,
+  // and run hit-testing without competing with the line layer.
+  const wptFeatures = [];
+  for (const f of track.geojson.features) {
+    if (f.geometry.type === 'Point') {
+      wptFeatures.push(f);
+    } else if (f.geometry.type === 'MultiPoint') {
+      // Explode MultiPoints — easier symbology and labelling.
+      for (const c of f.geometry.coordinates) {
+        wptFeatures.push({
+          type: 'Feature',
+          geometry: { type: 'Point', coordinates: c },
+          properties: { ...(f.properties || {}) },
+        });
+      }
+    }
+  }
+  if (wptFeatures.length) {
+    const wptSrcId = sourceId + '-wpt-src';
+    S.map.addSource(wptSrcId, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: wptFeatures },
+    });
+
+    // Color by category. Falls through to the track color for generic points.
+    const colorByKind = [
+      'match', ['coalesce', ['get', '_kind'], 'generic'],
+      'camp', '#FF6B35',
+      'peak', '#4A9EFF',
+      'water', '#3DC9F5',
+      'trailhead', '#FFD700',
+      'view', '#A78BFA',
+      'food', '#F5A623',
+      'hazard', '#FF3B30',
+      track.color,
+    ];
+    const radiusByZoom = [
+      'interpolate', ['linear'], ['zoom'],
+      6, 2.5,
+      10, 4.5,
+      14, 6.5,
+      18, 8,
+    ];
+
+    S.map.addLayer({
+      id: wptId,
+      type: 'circle',
+      source: wptSrcId,
+      paint: {
+        'circle-radius': radiusByZoom,
+        'circle-color': colorByKind,
+        'circle-stroke-color': '#ffffff',
+        'circle-stroke-width': 1.5,
+        'circle-stroke-opacity': 0.95,
+        'circle-opacity': 0.95,
+      },
+    });
+
+    // Optional name labels — rendered only when sufficiently zoomed in to keep
+    // the map readable. Uses font stack with fallbacks for cross-basemap glyph
+    // availability; if no glyph URL is configured for a basemap the layer is
+    // simply ignored by MapLibre.
+    S.map.addLayer({
+      id: wptLabelId,
+      type: 'symbol',
+      source: wptSrcId,
+      minzoom: 11,
+      layout: {
+        'text-field': ['coalesce', ['get', 'name'], ''],
+        'text-font': ['Noto Sans Regular', 'Open Sans Regular', 'Arial Unicode MS Regular'],
+        'text-size': 11,
+        'text-offset': [0, 0.9],
+        'text-anchor': 'top',
+        'text-allow-overlap': false,
+        'text-optional': true,
+        'text-max-width': 9,
+      },
+      paint: {
+        'text-color': '#ffffff',
+        'text-halo-color': 'rgba(0,0,0,0.85)',
+        'text-halo-width': 1.5,
+      },
+    });
+
+    // Click → popup
+    S.map.on('click', wptId, (e) => {
+      const f = e.features[0];
+      const p = f.properties || {};
+      const name = p.name || 'Waypoint';
+      const desc = p.desc || p.cmt || '';
+      const sym = p.sym || p.type || '';
+      const ele = p.ele != null ? `<div class="wpt-meta">elev ${fmt.ele(Number(p.ele))} ft</div>` : '';
+      const kindBadge = p._kind && p._kind !== 'generic'
+        ? `<span class="wpt-kind kind-${p._kind}">${p._kind}</span>` : '';
+      const html = `
+        <div class="wpt-popup">
+          <div class="wpt-name">${escapeHtml(name)} ${kindBadge}</div>
+          ${sym && sym !== name ? `<div class="wpt-sym">${escapeHtml(sym)}</div>` : ''}
+          ${desc ? `<div class="wpt-desc">${escapeHtml(desc).slice(0, 240)}${desc.length > 240 ? '…' : ''}</div>` : ''}
+          ${ele}
+          <div class="wpt-coords">${f.geometry.coordinates[1].toFixed(5)}, ${f.geometry.coordinates[0].toFixed(5)}</div>
+        </div>`;
+      new maplibregl.Popup({ offset: 12, className: 'wpt-popup-wrap', maxWidth: '260px' })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(S.map);
+      // Selecting parent track makes the elevation profile pop up too if it's a route+wpt file
+      selectTrack(track.id);
+    });
+    S.map.on('mouseenter', wptId, () => S.map.getCanvas().style.cursor = 'pointer');
+    S.map.on('mouseleave', wptId, () => S.map.getCanvas().style.cursor = '');
+  }
+
+  // ----- Start / End pins (only if there's at least one line) -----
+  const startEnd = startEndCoords(track);
+  if (startEnd) {
+    const pinSource = sourceId + '-pins';
+    S.map.addSource(pinSource, {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: [
+          { type: 'Feature', geometry: { type: 'Point', coordinates: startEnd.start }, properties: { kind: 'start' } },
+          { type: 'Feature', geometry: { type: 'Point', coordinates: startEnd.end }, properties: { kind: 'end' } },
+        ],
+      },
+    });
+    S.map.addLayer({
+      id: startId,
+      type: 'circle',
+      source: pinSource,
+      filter: ['==', ['get', 'kind'], 'start'],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#6BCB77',
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 2,
+      },
+    });
+    S.map.addLayer({
+      id: endId,
+      type: 'circle',
+      source: pinSource,
+      filter: ['==', ['get', 'kind'], 'end'],
+      paint: {
+        'circle-radius': 6,
+        'circle-color': '#FF6B9D',
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 2,
+      },
+    });
+  }
+
+  track.layerIds = [glowId, lineId, startId, endId, wptId, wptLabelId];
+
+  // Click on a line → popup with track stats
+  S.map.on('click', lineId, (e) => {
+    selectTrack(track.id);
+    showTrackPopup(track, e.lngLat);
+  });
+  S.map.on('mouseenter', lineId, () => S.map.getCanvas().style.cursor = 'pointer');
+  S.map.on('mouseleave', lineId, () => S.map.getCanvas().style.cursor = '');
+}
+
+function startEndCoords(track) {
+  const f = track.geojson.features.find(f => f.geometry.type === 'LineString' || f.geometry.type === 'MultiLineString');
+  if (!f) return null;
+  if (f.geometry.type === 'LineString') {
+    const c = f.geometry.coordinates;
+    return { start: c[0], end: c[c.length - 1] };
+  } else {
+    const lines = f.geometry.coordinates;
+    return { start: lines[0][0], end: lines[lines.length - 1][lines[lines.length - 1].length - 1] };
+  }
+}
+
+function showTrackPopup(track, lngLat) {
+  const s = track.stats;
+  const html = `
+    <div class="track-popup-name" style="color:${track.color}">${escapeHtml(track.name)}</div>
+    <div class="track-popup-stats">
+      <span class="lbl">Distance</span><span>${fmt.dist(s.distance)} mi</span>
+      <span class="lbl">Gain</span><span>${fmt.ele(s.gain)} ft</span>
+      <span class="lbl">Loss</span><span>${fmt.ele(s.loss)} ft</span>
+      <span class="lbl">Max ele</span><span>${fmt.ele(s.maxEle)} ft</span>
+      <span class="lbl">Min ele</span><span>${fmt.ele(s.minEle)} ft</span>
+    </div>
+  `;
+  new maplibregl.Popup({ closeButton: true, closeOnClick: true, maxWidth: '260px' })
+    .setLngLat(lngLat).setHTML(html).addTo(S.map);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+function fitTrack(track) {
+  // Build bounds from line coordinates AND waypoints (track may be waypoint-only).
+  const pts = track.allCoords.slice();
+  for (const f of track.geojson.features) {
+    if (f.geometry.type === 'Point') pts.push(f.geometry.coordinates);
+    else if (f.geometry.type === 'MultiPoint')
+      for (const c of f.geometry.coordinates) pts.push(c);
+  }
+  if (!pts.length) return;
+  let minLng = pts[0][0], maxLng = pts[0][0], minLat = pts[0][1], maxLat = pts[0][1];
+  for (const c of pts) {
+    if (c[0] < minLng) minLng = c[0];
+    if (c[0] > maxLng) maxLng = c[0];
+    if (c[1] < minLat) minLat = c[1];
+    if (c[1] > maxLat) maxLat = c[1];
+  }
+  // For pure-waypoint or single-coord tracks, expand the bbox slightly so we
+  // don't over-zoom into a single pixel.
+  if (Math.abs(maxLng - minLng) < 0.001 && Math.abs(maxLat - minLat) < 0.001) {
+    const pad = 0.01;
+    minLng -= pad; maxLng += pad; minLat -= pad; maxLat += pad;
+  }
+  S.map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 900, maxZoom: 14 });
+}
+
+function fitAllTracks() {
+  if (!S.tracks.size) { toast('No tracks loaded'); return; }
+  let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity;
+  let any = false;
+  const visit = (c) => {
+    any = true;
+    if (c[0] < minLng) minLng = c[0];
+    if (c[0] > maxLng) maxLng = c[0];
+    if (c[1] < minLat) minLat = c[1];
+    if (c[1] > maxLat) maxLat = c[1];
+  };
+  for (const t of S.tracks.values()) {
+    for (const c of t.allCoords) visit(c);
+    for (const f of t.geojson.features) {
+      if (f.geometry.type === 'Point') visit(f.geometry.coordinates);
+      else if (f.geometry.type === 'MultiPoint')
+        for (const c of f.geometry.coordinates) visit(c);
+    }
+  }
+  if (!any) return;
+  S.map.fitBounds([[minLng, minLat], [maxLng, maxLat]], { padding: 80, duration: 900, maxZoom: 14 });
+}
+
+function removeTrack(id) {
+  const t = S.tracks.get(id);
+  if (!t) return;
+  if (t.pinned) {
+    toast('Library tracks (camping, peaks) are pinned. Edit /manifest.json to remove.', 'info');
+    return;
+  }
+  for (const layerId of t.layerIds || []) if (S.map.getLayer(layerId)) S.map.removeLayer(layerId);
+  if (S.map.getSource(`track-${id}`)) S.map.removeSource(`track-${id}`);
+  if (S.map.getSource(`track-${id}-pins`)) S.map.removeSource(`track-${id}-pins`);
+  if (S.map.getSource(`track-${id}-wpt-src`)) S.map.removeSource(`track-${id}-wpt-src`);
+  S.tracks.delete(id);
+  if (S.selectedTrackId === id) {
+    S.selectedTrackId = null;
+    hideElevation();
+  }
+  buildTracksUI();
+  Store.saveTracks();
+}
+
+function selectTrack(id) {
+  S.selectedTrackId = id;
+  buildTracksUI();
+  const t = S.tracks.get(id);
+  if (t) showElevation(t);
+}
+
+function buildTracksUI() {
+  const list = $('#tracks-list');
+  $('#tracks-count').textContent = S.tracks.size;
+  list.innerHTML = '';
+  if (!S.tracks.size) {
+    list.innerHTML = '<div class="empty-state">Drop GPX files here<br>or click <strong>Load GPX File</strong></div>';
+    return;
+  }
+  for (const t of S.tracks.values()) {
+    const el = document.createElement('div');
+    el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '');
+    const wpts = t.stats.wptCount || 0;
+    const wptStat = wpts > 0
+      ? `<div class="track-item-stat"><span class="label">⊙</span>${wpts}<span class="label">${wpts === 1 ? 'pt' : 'pts'}</span></div>`
+      : '';
+    const distStat = t.stats.distance > 0
+      ? `<div class="track-item-stat"><span class="label">DIST</span>${fmt.dist(t.stats.distance)}<span class="label">mi</span></div>` : '';
+    const gainStat = t.stats.gain > 0
+      ? `<div class="track-item-stat"><span class="label">↑</span>${fmt.ele(t.stats.gain)}<span class="label">ft</span></div>` : '';
+    const maxStat = (t.stats.maxEle || 0) > 0
+      ? `<div class="track-item-stat"><span class="label">MAX</span>${fmt.ele(t.stats.maxEle)}<span class="label">ft</span></div>` : '';
+    const pinTag = t.pinned ? '<span class="track-pin" title="Library track — managed via manifest.json">📌</span>' : '';
+    const deleteBtn = t.pinned ? '' : '<button class="track-act danger" data-act="delete" title="Remove">×</button>';
+    el.innerHTML = `
+      <div class="track-item-color" style="background:${t.color}"></div>
+      <div class="track-item-name">${pinTag}${escapeHtml(t.name)}</div>
+      <div class="track-item-stats">
+        ${distStat}${gainStat}${maxStat}${wptStat}
+      </div>
+      <div class="track-item-actions">
+        <button class="track-act" data-act="fit" title="Fit to view">⤢</button>
+        ${deleteBtn}
+      </div>
+    `;
+    el.addEventListener('click', (e) => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'delete') {
+        e.stopPropagation();
+        removeTrack(t.id);
+      } else if (act === 'fit') {
+        e.stopPropagation();
+        fitTrack(t);
+      } else {
+        selectTrack(t.id);
+        fitTrack(t);
+      }
+    });
+    list.appendChild(el);
+  }
+}
+
+// ============================================================
+// ELEVATION PROFILE (Chart.js)
+// ============================================================
+function showElevation(track) {
+  S.elevTrackId = track.id;
+  $('#elevation-panel').classList.add('show');
+  $('#elev-name').textContent = track.name;
+  $('#elev-swatch').style.background = track.color;
+
+  const s = track.stats;
+  $('#elev-stats').innerHTML = `
+    <span class="stat">DIST<span class="v">${fmt.dist(s.distance)} mi</span></span>
+    <span class="stat">↑<span class="v">${fmt.ele(s.gain)} ft</span></span>
+    <span class="stat">↓<span class="v">${fmt.ele(s.loss)} ft</span></span>
+    <span class="stat">MAX<span class="v">${fmt.ele(s.maxEle)} ft</span></span>
+  `;
+
+  // Build chart data — downsample if very long for performance
+  const n = track.allCoords.length;
+  const targetPoints = 600;
+  const step = Math.max(1, Math.floor(n / targetPoints));
+  const data = [];
+  const labels = [];
+  for (let i = 0; i < n; i += step) {
+    data.push({ x: s.cumDist[i] * 0.000621371, y: s.smoothEle[i] * 3.28084 });
+    labels.push(s.cumDist[i] * 0.000621371);
+  }
+  // ensure last point included
+  if ((n - 1) % step !== 0) {
+    data.push({ x: s.cumDist[n - 1] * 0.000621371, y: s.smoothEle[n - 1] * 3.28084 });
+  }
+
+  // Compute grade per segment for coloring
+  const segColors = [];
+  for (let i = 1; i < data.length; i++) {
+    const dDist = (data[i].x - data[i - 1].x) * 1609.34; // m
+    const dEle  = (data[i].y - data[i - 1].y) * 0.3048;  // m
+    const gradePct = dDist > 1 ? (dEle / dDist) * 100 : 0;
+    segColors.push(colorForGrade(gradePct));
+  }
+
+  const ctx = document.getElementById('elev-canvas').getContext('2d');
+  if (S.elevChart) S.elevChart.destroy();
+  S.elevChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      datasets: [{
+        data,
+        borderColor: track.color,
+        borderWidth: 2,
+        fill: true,
+        backgroundColor: (c) => {
+          const g = c.chart.ctx.createLinearGradient(0, 0, 0, c.chart.height);
+          g.addColorStop(0, hexToRgba(track.color, 0.45));
+          g.addColorStop(1, hexToRgba(track.color, 0.02));
+          return g;
+        },
+        pointRadius: 0,
+        tension: 0.25,
+        segment: {
+          borderColor: (c) => segColors[c.p0DataIndex] || track.color,
+        },
+      }]
+    },
+    options: {
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      interaction: { intersect: false, mode: 'index' },
+      plugins: {
+        legend: { display: false },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          ticks: { color: '#5a6178', font: { family: 'JetBrains Mono', size: 9 }, callback: (v) => v.toFixed(1) + ' mi' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+        },
+        y: {
+          ticks: { color: '#5a6178', font: { family: 'JetBrains Mono', size: 9 }, callback: (v) => v.toLocaleString() + ' ft' },
+          grid: { color: 'rgba(255,255,255,0.04)' },
+        },
+      },
+      onHover: (e, items) => {
+        if (!items.length) {
+          if (S.hoverMarker) { S.hoverMarker.remove(); S.hoverMarker = null; }
+          $('#elev-readout').classList.remove('show');
+          return;
+        }
+        const idx = items[0].index;
+        const pt = data[idx];
+        // Find original coord index nearest to this distance
+        const targetMeters = pt.x / 0.000621371;
+        const origIdx = nearestCoordIndex(track, targetMeters);
+        const coord = track.allCoords[origIdx];
+        if (coord) {
+          if (!S.hoverMarker) {
+            const el = document.createElement('div');
+            el.className = 'hover-marker';
+            S.hoverMarker = new maplibregl.Marker({ element: el })
+              .setLngLat([coord[0], coord[1]]).addTo(S.map);
+          } else {
+            S.hoverMarker.setLngLat([coord[0], coord[1]]);
+          }
+          $('#elev-readout').classList.add('show');
+          $('#elev-readout').textContent =
+            `${pt.x.toFixed(2)} mi · ${Math.round(pt.y).toLocaleString()} ft`;
+        }
+      },
+    }
+  });
+}
+
+function nearestCoordIndex(track, targetMeters) {
+  const cd = track.stats.cumDist;
+  let lo = 0, hi = cd.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (cd[mid] < targetMeters) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+function colorForGrade(pct) {
+  const a = Math.abs(pct);
+  if (a < 4) return '#6BCB77';   // gentle
+  if (a < 10) return '#FFD93D';  // moderate
+  if (a < 18) return '#FF9F5A';  // steep
+  if (a < 30) return '#FF6B35';  // very steep
+  return '#FF6B9D';              // extreme — avalanche-relevant zone (30°+)
+}
+
+function hexToRgba(hex, a) {
+  const m = hex.match(/^#([0-9a-f]{6})$/i);
+  if (!m) return hex;
+  const n = parseInt(m[1], 16);
+  return `rgba(${(n>>16)&255}, ${(n>>8)&255}, ${n&255}, ${a})`;
+}
+
+function hideElevation() {
+  $('#elevation-panel').classList.remove('show');
+  if (S.hoverMarker) { S.hoverMarker.remove(); S.hoverMarker = null; }
+  S.elevTrackId = null;
+}
+
+// ============================================================
+// WEATHER (Open-Meteo)
+// ============================================================
+const WMO_ICONS = {
+  0: ['☀️', 'Clear sky'],
+  1: ['🌤️', 'Mostly clear'],
+  2: ['⛅', 'Partly cloudy'],
+  3: ['☁️', 'Overcast'],
+  45: ['🌫️', 'Fog'],
+  48: ['🌫️', 'Rime fog'],
+  51: ['🌦️', 'Light drizzle'],
+  53: ['🌦️', 'Drizzle'],
+  55: ['🌧️', 'Heavy drizzle'],
+  56: ['🌧️', 'Freezing drizzle'],
+  57: ['🌧️', 'Heavy freezing drizzle'],
+  61: ['🌧️', 'Light rain'],
+  63: ['🌧️', 'Rain'],
+  65: ['🌧️', 'Heavy rain'],
+  66: ['🌧️', 'Freezing rain'],
+  67: ['🌧️', 'Heavy freezing rain'],
+  71: ['🌨️', 'Light snow'],
+  73: ['❄️', 'Snow'],
+  75: ['❄️', 'Heavy snow'],
+  77: ['❄️', 'Snow grains'],
+  80: ['🌦️', 'Rain showers'],
+  81: ['🌧️', 'Heavy rain showers'],
+  82: ['⛈️', 'Violent rain showers'],
+  85: ['🌨️', 'Snow showers'],
+  86: ['❄️', 'Heavy snow showers'],
+  95: ['⛈️', 'Thunderstorm'],
+  96: ['⛈️', 'Thunderstorm + hail'],
+  99: ['⛈️', 'Severe thunderstorm'],
+};
+
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+async function showWeatherAt(lng, lat) {
+  // Pin marker
+  if (S.weatherMarker) S.weatherMarker.remove();
+  const el = document.createElement('div');
+  el.className = 'weather-marker';
+  S.weatherMarker = new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(S.map);
+
+  $('#weather-panel').classList.add('show');
+  $('#weather-content').innerHTML = `<div class="weather-loading"><div class="spinner"></div>Loading forecast…</div>`;
+
+  try {
+    const params = new URLSearchParams({
+      latitude: lat.toFixed(4),
+      longitude: lng.toFixed(4),
+      current: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m,relative_humidity_2m,apparent_temperature',
+      daily: 'weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,snowfall_sum,sunrise,sunset',
+      hourly: 'temperature_2m,precipitation_probability,snowfall',
+      temperature_unit: 'celsius',
+      wind_speed_unit: 'kmh',
+      timezone: 'auto',
+      forecast_days: 7,
+    });
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    renderWeather(data, lng, lat);
+  } catch (e) {
+    $('#weather-content').innerHTML = `<div class="weather-loading">Forecast unavailable<br><small>${e.message}</small></div>`;
+  }
+}
+
+function renderWeather(data, lng, lat) {
+  const c = data.current;
+  const d = data.daily;
+  const [icon, label] = WMO_ICONS[c.weather_code] || ['❓', '—'];
+
+  // Compute temp range across the week for bar scaling
+  const allTemps = [...d.temperature_2m_max, ...d.temperature_2m_min];
+  const tMin = Math.min(...allTemps);
+  const tMax = Math.max(...allTemps);
+
+  const sunrise = new Date(d.sunrise[0]);
+  const sunset  = new Date(d.sunset[0]);
+  const fmtTime = (d) => d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const windDir = c.wind_direction_10m;
+  const compass = compassFromDeg(windDir);
+
+  const forecastHtml = d.time.map((t, i) => {
+    const date = new Date(t);
+    const day = i === 0 ? 'Today' : DAY_NAMES[date.getDay()];
+    const [ic] = WMO_ICONS[d.weather_code[i]] || ['❓'];
+    const hi = fmt.temp(d.temperature_2m_max[i]);
+    const lo = fmt.temp(d.temperature_2m_min[i]);
+    const precip = d.precipitation_probability_max[i] ?? 0;
+    const snow = d.snowfall_sum[i] ?? 0;
+
+    const barLeft  = ((d.temperature_2m_min[i] - tMin) / (tMax - tMin)) * 100;
+    const barWidth = ((d.temperature_2m_max[i] - d.temperature_2m_min[i]) / (tMax - tMin)) * 100;
+
+    return `
+      <div class="forecast-row" title="${WMO_ICONS[d.weather_code[i]]?.[1] || ''}">
+        <div class="forecast-day">${day}</div>
+        <div class="forecast-icon">${ic}</div>
+        <div class="forecast-bar">
+          <div class="forecast-bar-fill" style="left:${barLeft}%;width:${Math.max(barWidth, 8)}%"></div>
+        </div>
+        <div class="forecast-temps">
+          <span class="forecast-hi">${hi}°</span><span class="forecast-lo">${lo}°</span>
+          ${precip > 10 ? `<span class="forecast-precip" style="display:block">${precip}% · ${snow > 0.1 ? fmt.snow(snow) + '"❄' : ''}</span>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  const avalanche = avalancheLink(lat, lng);
+
+  $('#weather-content').innerHTML = `
+    <div class="weather-header">
+      <div>
+        <div class="weather-title">Forecast</div>
+        <div class="weather-loc">${fmt.ll(lat, 4)}, ${fmt.ll(lng, 4)}</div>
+      </div>
+      <button class="weather-close" id="weather-close-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+      </button>
+    </div>
+    <div class="weather-current">
+      <div class="weather-icon-big">${icon}</div>
+      <div>
+        <div class="weather-temp-big">${fmt.temp(c.temperature_2m)}°<span style="font-size:14px;color:var(--text-dim);font-weight:500"> F</span></div>
+        <div class="weather-cond">${label}</div>
+      </div>
+    </div>
+    <div class="weather-meta">
+      <div class="item"><div class="lbl">Feels</div><div class="val">${fmt.temp(c.apparent_temperature)}°</div></div>
+      <div class="item"><div class="lbl">Wind</div><div class="val">${fmt.wind(c.wind_speed_10m)} mph ${compass}</div></div>
+      <div class="item"><div class="lbl">Humidity</div><div class="val">${Math.round(c.relative_humidity_2m)}%</div></div>
+      <div class="item"><div class="lbl">Sun</div><div class="val">${fmtTime(sunrise)}–${fmtTime(sunset)}</div></div>
+    </div>
+    <div class="weather-forecast">${forecastHtml}</div>
+    <a class="avalanche-link" href="${avalanche.url}" target="_blank" rel="noopener">
+      <span style="font-size:14px">⚠️</span>
+      <span>${avalanche.label}</span>
+      <svg class="ext" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 4h6v6M20 4L10 14M5 5h4M5 19h14v-9"/>
+      </svg>
+    </a>
+  `;
+  $('#weather-close-btn').onclick = () => {
+    $('#weather-panel').classList.remove('show');
+    if (S.weatherMarker) { S.weatherMarker.remove(); S.weatherMarker = null; }
+  };
+}
+
+function compassFromDeg(deg) {
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  return dirs[Math.round(deg / 22.5) % 16];
+}
+
+// CAIC zone routing for Colorado lat/lng. Outside CO, fall back to avalanche.org regional landing.
+function avalancheLink(lat, lng) {
+  // Colorado CAIC zones (approx bounding boxes — best-effort)
+  // CO bounds: lat 36.99–41.01, lng -109.06 to -102.04
+  const inCO = lat >= 36.99 && lat <= 41.01 && lng >= -109.06 && lng <= -102.04;
+  if (inCO) {
+    // Coarse zone classification
+    let zone = 'front-range';
+    if (lng < -107.0 && lat > 38.7) zone = 'northern-mountains';
+    else if (lng < -107.0 && lat <= 38.7) zone = 'southern-mountains';
+    else if (lng < -106.0 && lat >= 39.0) zone = 'vail-summit';
+    else if (lng < -106.0 && lat < 39.0) zone = 'sawatch';
+    else if (lng < -105.5) zone = 'gore-tenmile';
+    else zone = 'front-range';
+    return {
+      url: `https://avalanche.state.co.us/forecasts/backcountry-avalanche/`,
+      label: `CAIC forecast · ${zone.replace('-', ' ')}`,
+    };
+  }
+  // Regional avalanche centers — link to avalanche.org map
+  return {
+    url: `https://avalanche.org/#/current?lat=${lat.toFixed(3)}&lng=${lng.toFixed(3)}`,
+    label: 'Avalanche forecast (avalanche.org)',
+  };
+}
+
+// ============================================================
+// SEARCH (Nominatim)
+// ============================================================
+const search = debounce(async (q) => {
+  if (!q || q.length < 2) {
+    $('#search-results').classList.remove('show');
+    return;
+  }
+  if (S.searchAbort) S.searchAbort.abort();
+  S.searchAbort = new AbortController();
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${encodeURIComponent(q)}`;
+    const r = await fetch(url, { headers: { 'Accept-Language': navigator.language || 'en' }, signal: S.searchAbort.signal });
+    if (!r.ok) throw new Error();
+    const items = await r.json();
+    if (!items.length) {
+      $('#search-results').innerHTML = '<div class="search-result" style="color:var(--text-muted)">No results</div>';
+      $('#search-results').classList.add('show');
+      return;
+    }
+    $('#search-results').innerHTML = items.map((it) => `
+      <div class="search-result" data-lat="${it.lat}" data-lon="${it.lon}" data-label="${escapeHtml(it.display_name)}">
+        ${escapeHtml(it.display_name.split(',').slice(0, 2).join(','))}
+        <div class="sub">${escapeHtml(it.display_name.split(',').slice(2).join(',').trim()) || it.type}</div>
+      </div>
+    `).join('');
+    $('#search-results').classList.add('show');
+    $$('#search-results .search-result').forEach(el => el.addEventListener('click', () => {
+      const lat = parseFloat(el.dataset.lat);
+      const lng = parseFloat(el.dataset.lon);
+      S.map.flyTo({ center: [lng, lat], zoom: 12, duration: 1200 });
+      $('#search-input').value = '';
+      $('#search-results').classList.remove('show');
+    }));
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      $('#search-results').innerHTML = '<div class="search-result" style="color:var(--danger)">Search failed</div>';
+      $('#search-results').classList.add('show');
+    }
+  }
+}, 280);
+
+// ============================================================
+// CONTROLS WIRING
+// ============================================================
+function wireControls() {
+  $('#btn-zoom-in').onclick = () => S.map.zoomIn();
+  $('#btn-zoom-out').onclick = () => S.map.zoomOut();
+  $('#btn-3d').onclick = () => setTerrain(!S.terrain);
+  $('#btn-fit').onclick = fitAllTracks;
+  $('#btn-fullscreen').onclick = () => {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  };
+  $('#btn-locate').onclick = () => {
+    if (!navigator.geolocation) { toast('Geolocation not available', 'error'); return; }
+    navigator.geolocation.getCurrentPosition((pos) => {
+      S.map.flyTo({ center: [pos.coords.longitude, pos.coords.latitude], zoom: 13, duration: 1200 });
+    }, () => toast('Could not get location', 'error'));
+  };
+  $('#btn-pin').onclick = () => {
+    setPinMode(!S.pinMode);
+    if (S.pinMode) toast('Pin mode: click on the map to drop a pin (Esc to cancel)', 'info');
+  };
+
+  $('#btn-load-gpx').onclick = () => $('#file-input').click();
+  $('#file-input').addEventListener('change', async (e) => {
+    for (const f of e.target.files) await loadGPXFile(f);
+    e.target.value = '';
+  });
+
+  $('#sidebar-toggle').onclick = () => $('#app').classList.toggle('sidebar-collapsed');
+  // Mobile: tap header to expand/collapse bottom sheet
+  $('#sidebar-header').onclick = () => {
+    if (window.innerWidth <= 720) $('#sidebar').classList.toggle('open');
+  };
+
+  // Search
+  $('#search-input').addEventListener('input', (e) => search(e.target.value));
+  $('#search-input').addEventListener('focus', () => {
+    if ($('#search-input').value.length >= 2) $('#search-results').classList.add('show');
+  });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.search-wrap')) $('#search-results').classList.remove('show');
+  });
+
+  // Drag & drop
+  const drop = $('#drop-overlay');
+  let dragCounter = 0;
+  document.addEventListener('dragenter', (e) => {
+    if ([...e.dataTransfer.types].includes('Files')) {
+      dragCounter++;
+      drop.classList.add('show');
+    }
+  });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('dragleave', () => {
+    dragCounter--;
+    if (dragCounter <= 0) { dragCounter = 0; drop.classList.remove('show'); }
+  });
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    dragCounter = 0;
+    drop.classList.remove('show');
+    const files = [...e.dataTransfer.files].filter(f => /\.gpx$/i.test(f.name));
+    if (!files.length) { toast('No GPX files found', 'error'); return; }
+    for (const f of files) await loadGPXFile(f);
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea')) return;
+    if (e.key === '3') setTerrain(!S.terrain);
+    else if (e.key === 'f' || e.key === 'F') $('#btn-fullscreen').click();
+    else if (e.key === 'p' || e.key === 'P') $('#btn-pin').click();
+    else if (e.key === '/') {
+      e.preventDefault();
+      $('#search-input').focus();
+    } else if (e.key === 'Escape') {
+      $('#search-results').classList.remove('show');
+      $('#weather-panel').classList.remove('show');
+      hideElevation();
+      if (S.weatherMarker) { S.weatherMarker.remove(); S.weatherMarker = null; }
+      if (S.pinMode) setPinMode(false);
+    } else if (e.key === 'b' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      $('#sidebar-toggle').click();
+    }
+  });
+
+  // Window resize: keep scale & layout fresh
+  window.addEventListener('resize', () => {
+    if (S.map) updateScaleBar();
+    if (S.elevChart) S.elevChart.resize();
+  });
+}
+
+// ============================================================
+// MANIFEST AUTO-LOAD
+// ============================================================
+async function tryManifest() {
+  try {
+    // Look in repo root first (recommended location), fall back to /gpx/.
+    let r = await fetch('./manifest.json', { cache: 'no-cache' });
+    if (!r.ok) r = await fetch('./gpx/manifest.json', { cache: 'no-cache' });
+    if (!r.ok) return;
+    const m = await r.json();
+    if (!Array.isArray(m.files)) return;
+    let loaded = 0;
+    for (const entry of m.files) {
+      const file = typeof entry === 'string' ? entry : entry.file;
+      const name = typeof entry === 'string' ? null : entry.name;
+      if (!file) continue;
+      const url = `./gpx/${file}`;
+      // Dedupe: if a track with this source URL is already loaded
+      // (e.g. restored from localStorage somehow), drop it first so the
+      // manifest version is the authoritative one.
+      for (const [id, t] of S.tracks) {
+        if (t.source === url || t.source === file) { S.tracks.delete(id); }
+      }
+      const t = await loadGPXFromURL(url, name);
+      if (t) {
+        t.pinned = true;
+        loaded++;
+      }
+    }
+    if (loaded > 0) {
+      buildTracksUI();
+      Store.saveTracks(); // re-save so pinned tracks aren't in localStorage
+      toast(`Loaded ${loaded} track${loaded === 1 ? '' : 's'} from library`, 'success');
+    }
+  } catch (e) { /* no manifest, that's fine */ }
+}
+
+// ============================================================
+// RESTORE PERSISTED TRACKS
+// ============================================================
+function restorePersistedTracks() {
+  const arr = Store.loadTracks();
+  if (!arr.length) return;
+  for (const t of arr) {
+    // Recompute stats (cheap, gives us cumDist/smoothEle which we don't store)
+    const allCoords = [];
+    for (const f of t.geojson.features) {
+      if (f.geometry.type === 'LineString')
+        for (const c of f.geometry.coordinates) allCoords.push(c);
+      else if (f.geometry.type === 'MultiLineString')
+        for (const line of f.geometry.coordinates)
+          for (const c of line) allCoords.push(c);
+    }
+    const stats = calcStats(allCoords);
+    const track = { ...t, stats, allCoords };
+    S.tracks.set(t.id, track);
+    renderTrackOnMap(track);
+  }
+  buildTracksUI();
+}
+
+// ============================================================
+// BOOT
+// ============================================================
+(async function init() {
+  await initMap();
+  buildBasemapUI();
+  buildLayersUI();
+  buildTerrainUI();
+  wireControls();
+  // Pins must exist as a source/layer before any restored or live data renders.
+  S.pins = Store.loadPins();
+  ensurePinLayers();
+  refreshPinLayer();
+  restorePersistedTracks();
+  await tryManifest();
+})();
+</script>
+</body>
+</html>
