@@ -686,6 +686,32 @@
   .weather-meta .lbl { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em; }
   .weather-meta .val { color: var(--text); font-weight: 500; font-size: 11px; }
 
+  /* Drive-time row in weather popup — sits between the meta grid and the
+     forecast strip. Subtle so it doesn't visually compete with conditions. */
+  .drive-time {
+    margin: 8px 0 10px 0;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+  .drive-time .dt-row {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+  }
+  .drive-time .dt-icon { font-size: 13px; }
+  .drive-time .dt-label { color: var(--text-muted); flex-shrink: 0; }
+  .drive-time .dt-val {
+    color: var(--accent);
+    font-weight: 700;
+    margin-left: auto;
+  }
+  .drive-time .dt-dist {
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+
   .weather-forecast {
     padding: 8px 8px 12px;
     border-top: 1px solid var(--border);
@@ -1505,6 +1531,10 @@ import { gpx } from 'https://esm.sh/@tmcw/togeojson@5';
 // CONFIG
 // ============================================================
 const CFG = {
+  // Origin for "drive time from X" in the weather popup. Default is downtown
+  // Denver. Override `lat`/`lng`/`label` to change.
+  driveOrigin: { lat: 39.7392, lng: -104.9903, label: 'Denver' },
+
   // Track palette — bright, distinguishable on satellite & topo
   trackColors: [
     '#FF6B35', '#4A9EFF', '#FFD93D', '#6BCB77',
@@ -1581,7 +1611,11 @@ const CFG = {
       label: 'National Forests',
       color: '#3d6b46',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agency: 'U.S. Forest Service',
+      whereField: 'Agency',
+      whereValue: 'U.S. Forest Service',
+      outFields: 'Agency,unit_name',
+      nameField: 'unit_name',
+      agencyField: 'Agency',
       opacity: 0.45,
       attribution: 'USA Federal Lands · Esri Living Atlas',
     },
@@ -1590,18 +1624,30 @@ const CFG = {
       label: 'BLM Land',
       color: '#d4a017',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agency: 'Bureau of Land Management',
+      whereField: 'Agency',
+      whereValue: 'Bureau of Land Management',
+      outFields: 'Agency,unit_name',
+      nameField: 'unit_name',
+      agencyField: 'Agency',
       opacity: 0.45,
       attribution: 'USA Federal Lands · Esri Living Atlas',
     },
     parks: {
+      // National Parks: switched to the NPS-authoritative Land Resources Division
+      // boundary service. The Esri Living Atlas USA_Federal_Lands service was
+      // missing many parks for unknown reasons; this NPS service is the canonical
+      // source. Schema differs (UNIT_NAME / UNIT_TYPE / GROUP_NAM, layer 2 = boundaries).
       kind: 'feature-query',
       label: 'National Parks',
       color: '#1f5132',
-      featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
-      agency: 'National Park Service',
+      featureUrl: 'https://services1.arcgis.com/fBc8EJBxQRMcHlei/arcgis/rest/services/NPS_Land_Resources_Division_Boundary_and_Tract_Data_Service/FeatureServer/2/query',
+      whereField: null,            // no filter; service only contains NPS units
+      whereValue: null,
+      outFields: 'UNIT_NAME,UNIT_TYPE,UNIT_CODE',
+      nameField: 'UNIT_NAME',
+      agencyField: 'UNIT_TYPE',    // shows e.g. "National Park", "National Monument"
       opacity: 0.55,
-      attribution: 'USA Federal Lands · Esri Living Atlas',
+      attribution: 'NPS Land Resources Division',
     },
     wilderness: {
       kind: 'arcgis-export',
@@ -2080,7 +2126,7 @@ async function setBasemap(key) {
 
   // Style changed — reset feature-query state so layers refetch
   unregisterFederalLandsMoveEnd();
-  _flLastKey = null;
+  _flLastKey.clear();
 
   // Re-add terrain / hillshade / lands / tracks
   if (wasTerrain) await setTerrain(true, true);
@@ -2350,108 +2396,104 @@ function setLayer(key, on, force = false) {
 }
 
 // ============================================================
-// Federal lands — vector viewport queries (Esri Living Atlas)
+// Federal lands — vector viewport queries
 // ============================================================
-// One service feeds all three vector layers (forests, blm, parks).
-// Each MapLibre source holds only that agency's polygons; we run one fetch
-// per viewport refresh and split the response into per-source feature
-// collections by `agbur`.
-let _flMoveEnd = null;
-let _flAbort = null;
-let _flLastKey = null;
+// Each feature-query layer hits its own service, with its own schema. The
+// previous version assumed all federal lands lived in one service; the NPS
+// move broke that. We now fetch per-layer and cache per (layer, viewport).
+const _flMoveEnd = { fn: null };
+const _flAbort = new Map();    // layerKey -> AbortController
+const _flLastKey = new Map();  // layerKey -> last viewport key
 
 function viewportKey() {
   const b = S.map.getBounds();
-  // Round to ~3 decimal places so tiny pans don't trigger refetch
   return `${b.getWest().toFixed(3)},${b.getSouth().toFixed(3)},${b.getEast().toFixed(3)},${b.getNorth().toFixed(3)}`;
 }
 
 async function fetchFederalLandsViewport() {
-  // Which agencies are currently visible
-  const wanted = Object.entries(CFG.layers)
-    .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k])
-    .map(([k, c]) => ({ key: k, agency: c.agency }));
-  if (!wanted.length) return;
-
+  if (S.map.getZoom() < 5) return;
   const k = viewportKey();
-  if (k === _flLastKey) return;
-  _flLastKey = k;
+  const wanted = Object.entries(CFG.layers)
+    .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k]);
+
+  for (const [key, cfg] of wanted) {
+    if (_flLastKey.get(key) === k) continue;
+    _flLastKey.set(key, k);
+    fetchOneLayer(key, cfg).catch(err => {
+      if (err.name !== 'AbortError') console.warn(`[${key}] fetch failed`, err);
+    });
+  }
+}
+
+async function fetchOneLayer(key, cfg) {
+  // Per-layer abort so panning fast doesn't pile up requests.
+  const prev = _flAbort.get(key);
+  if (prev) prev.abort();
+  const ctl = new AbortController();
+  _flAbort.set(key, ctl);
 
   const b = S.map.getBounds();
-  // Don't issue a global query at low zooms — too much data, request will
-  // either fail the maxRecordCount limit or the response will be slow.
-  if (S.map.getZoom() < 5) return;
-
-  if (_flAbort) _flAbort.abort();
-  _flAbort = new AbortController();
-
-  // Build SQL WHERE with full agency names quoted. Esri uses the Agency field
-  // with values like "U.S. Forest Service", "Bureau of Land Management".
-  // Single quotes inside the value (none here) would need doubling for SQL.
-  const where = `Agency IN (${wanted.map(w => `'${w.agency}'`).join(',')})`;
   const params = new URLSearchParams({
-    where,
     geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
     geometryType: 'esriGeometryEnvelope',
     inSR: '4326',
     outSR: '4326',
     spatialRel: 'esriSpatialRelIntersects',
-    outFields: 'Agency,unit_name',
+    outFields: cfg.outFields || '*',
     returnGeometry: 'true',
     f: 'geojson',
     resultRecordCount: '500',
     geometryPrecision: '5',
   });
-
-  const url = wanted[0] && CFG.layers[wanted[0].key].featureUrl;
-  if (!url) return;
-
-  try {
-    const r = await fetch(`${url}?${params}`, { signal: _flAbort.signal });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const data = await r.json();
-    if (data && data.error) throw new Error(data.error.message || 'service error');
-    const features = (data && data.features) || [];
-
-    // Split features by agency; assign to corresponding source
-    for (const w of wanted) {
-      const sub = {
-        type: 'FeatureCollection',
-        features: features.filter(f => (f.properties || {}).Agency === w.agency),
-      };
-      const src = S.map.getSource(`lands-${w.key}`);
-      if (src) src.setData(sub);
-    }
-  } catch (e) {
-    if (e.name !== 'AbortError') {
-      console.warn('Federal lands fetch failed:', e);
-      toast(`Federal lands: ${e.message}`, 'error', 4500);
-    }
+  // Optional WHERE clause — services that only contain one agency's data
+  // (like NPS-only) can skip this and use 1=1.
+  if (cfg.whereField && cfg.whereValue) {
+    params.set('where', `${cfg.whereField} = '${cfg.whereValue.replace(/'/g, "''")}'`);
+  } else {
+    params.set('where', '1=1');
   }
+
+  const r = await fetch(`${cfg.featureUrl}?${params}`, { signal: ctl.signal });
+  if (!r.ok) {
+    toast(`${cfg.label}: HTTP ${r.status}`, 'error', 4500);
+    return;
+  }
+  const data = await r.json();
+  if (data && data.error) {
+    toast(`${cfg.label}: ${data.error.message || 'service error'}`, 'error', 4500);
+    return;
+  }
+  const features = (data && data.features) || [];
+  const src = S.map.getSource(`lands-${key}`);
+  if (src) src.setData({ type: 'FeatureCollection', features });
 }
 
 function registerFederalLandsMoveEnd() {
-  if (_flMoveEnd) return;
-  _flMoveEnd = () => fetchFederalLandsViewport();
-  S.map.on('moveend', _flMoveEnd);
+  if (_flMoveEnd.fn) return;
+  _flMoveEnd.fn = () => fetchFederalLandsViewport();
+  S.map.on('moveend', _flMoveEnd.fn);
 }
 function unregisterFederalLandsMoveEnd() {
-  if (!_flMoveEnd) return;
-  S.map.off('moveend', _flMoveEnd);
-  _flMoveEnd = null;
-  _flLastKey = null;
+  if (!_flMoveEnd.fn) return;
+  S.map.off('moveend', _flMoveEnd.fn);
+  _flMoveEnd.fn = null;
+  _flLastKey.clear();
 }
 
 function federalLandClick(e) {
   const f = e.features[0];
   const p = f.properties || {};
-  const name = p.unit_name || 'Federal land';
-  const agency = p.Agency || '';
+  // Look up the layer config from the layer ID to find the right field names.
+  const layerId = e.features[0].layer.id; // e.g. "lands-parks-fill"
+  const key = layerId.replace('lands-', '').replace('-fill', '');
+  const cfg = CFG.layers[key];
+  const name = (cfg && cfg.nameField && p[cfg.nameField]) || p.unit_name || p.UNIT_NAME || p.name1 || 'Federal land';
+  const subtext = (cfg && cfg.agencyField && p[cfg.agencyField]) || cfg?.label || '';
   new maplibregl.Popup({ offset: 8, className: 'wpt-popup-wrap', maxWidth: '260px' })
     .setLngLat(e.lngLat)
     .setHTML(`<div class="fed-popup">
-      <div class="fed-popup-name">${escapeHtml(name)}</div>
-      <div class="fed-popup-agency">${escapeHtml(agency)}</div>
+      <div class="fed-popup-name">${escapeHtml(String(name))}</div>
+      <div class="fed-popup-agency">${escapeHtml(String(subtext))}</div>
     </div>`)
     .addTo(S.map);
 }
@@ -2883,6 +2925,108 @@ function loadGPXText(text, defaultName, source, options = {}) {
     Store.saveTracks();
     fitTrack(t);
     return t;
+  }
+
+  // ----- GROUP BY GEOMETRY TYPE -----
+  // For files with hundreds of features (PeaksAndRoutes-style), making each
+  // a separate track is too expensive — every track adds 6 MapLibre layers.
+  // Instead, bucket features by geometry type and render each bucket as a
+  // single set of layers. Click popups still resolve the individual feature's
+  // name, so users see "Vazquez" / "Berthoud" / etc. on click.
+  if (options.groupByGeomType) {
+    // Polygons aren't typical in GPX but handle them gracefully.
+    const polyFeatures = [];
+    const reclassifiedLines = [];
+    const reclassifiedWpts = [];
+    for (const f of fc.features) {
+      const gt = f.geometry.type;
+      if (gt === 'LineString' || gt === 'MultiLineString') reclassifiedLines.push(f);
+      else if (gt === 'Point' || gt === 'MultiPoint') reclassifiedWpts.push(f);
+      else if (gt === 'Polygon' || gt === 'MultiPolygon') polyFeatures.push(f);
+    }
+
+    // Compute combined stats for the lines bucket
+    let totalDist = 0, totalGain = 0, totalLoss = 0, maxEle = 0;
+    const allLineCoords = [];
+    for (const f of reclassifiedLines) {
+      const coords = [];
+      if (f.geometry.type === 'LineString') for (const c of f.geometry.coordinates) { coords.push(c); allLineCoords.push(c); }
+      else for (const line of f.geometry.coordinates) for (const c of line) { coords.push(c); allLineCoords.push(c); }
+      const s = calcStats(coords);
+      totalDist += s.distance; totalGain += s.gain; totalLoss += s.loss;
+      if (s.maxEle > maxEle) maxEle = s.maxEle;
+      f.properties = f.properties || {};
+      f.properties._stats = s;
+    }
+
+    const created = [];
+
+    if (reclassifiedLines.length) {
+      const t = {
+        id: 'trk-' + uid(),
+        name: `${fileBase} — Lines`,
+        color: nextTrackColor(),
+        geojson: { type: 'FeatureCollection', features: reclassifiedLines },
+        stats: {
+          distance: totalDist, gain: totalGain, loss: totalLoss,
+          maxEle, minEle: 0,
+          wptCount: 0, lineCount: reclassifiedLines.length,
+        },
+        source, allCoords: allLineCoords,
+        grouped: true,                 // share simplified sidebar UI
+        groupByGeomKind: 'lines',
+      };
+      S.tracks.set(t.id, t);
+      renderTrackOnMap(t);
+      created.push(t);
+    }
+
+    if (reclassifiedWpts.length) {
+      let wptCount = 0;
+      for (const f of reclassifiedWpts) {
+        f.properties = f.properties || {};
+        f.properties._kind = classifyWaypoint(f.properties);
+        wptCount += f.geometry.type === 'MultiPoint' ? f.geometry.coordinates.length : 1;
+      }
+      const t = {
+        id: 'trk-' + uid(),
+        name: `${fileBase} — Points`,
+        color: '#FFD93D',
+        geojson: { type: 'FeatureCollection', features: reclassifiedWpts },
+        stats: { distance: 0, gain: 0, loss: 0, maxEle: 0, minEle: 0, wptCount, lineCount: 0 },
+        source, allCoords: [],
+        grouped: true,
+        groupByGeomKind: 'points',
+        isWaypointGroup: true,
+      };
+      S.tracks.set(t.id, t);
+      renderTrackOnMap(t);
+      created.push(t);
+    }
+
+    if (polyFeatures.length) {
+      const t = {
+        id: 'trk-' + uid(),
+        name: `${fileBase} — Polygons`,
+        color: '#9F7AEA',
+        geojson: { type: 'FeatureCollection', features: polyFeatures },
+        stats: { distance: 0, gain: 0, loss: 0, maxEle: 0, minEle: 0, wptCount: 0, lineCount: 0 },
+        source, allCoords: [],
+        grouped: true,
+        groupByGeomKind: 'polygons',
+      };
+      S.tracks.set(t.id, t);
+      renderTrackOnMap(t);
+      created.push(t);
+    }
+
+    buildTracksUI();
+    Store.saveTracks();
+    if (created.length) {
+      fitTracks(created);
+      created[0].siblings = created;
+    }
+    return created[0] || null;
   }
 
   // ----- SPLIT MODE (default) -----
@@ -3853,6 +3997,14 @@ function renderWeather(data, lng, lat) {
       <div class="item"><div class="lbl">Humidity</div><div class="val">${Math.round(c.relative_humidity_2m)}%</div></div>
       <div class="item"><div class="lbl">Sun</div><div class="val">${fmtTime(sunrise)}–${fmtTime(sunset)}</div></div>
     </div>
+    <div class="drive-time" id="drive-time">
+      <div class="dt-row">
+        <span class="dt-icon">🚗</span>
+        <span class="dt-label">From ${escapeHtml(CFG.driveOrigin.label)}</span>
+        <span class="dt-val" id="drive-time-val">…</span>
+        <span class="dt-dist" id="drive-time-dist"></span>
+      </div>
+    </div>
     <div class="weather-forecast">${forecastHtml}</div>
     <a class="avalanche-link" href="${avalanche.url}" target="_blank" rel="noopener">
       <span style="font-size:14px">⚠️</span>
@@ -3866,6 +4018,54 @@ function renderWeather(data, lng, lat) {
     $('#weather-panel').classList.remove('show');
     if (S.weatherMarker) { S.weatherMarker.remove(); S.weatherMarker = null; }
   };
+  // Fire and forget — drive time fills in async so the rest of the panel
+  // is interactive immediately.
+  fetchDriveTime(lat, lng);
+}
+
+// Drive time from a fixed origin (default Denver) using OSRM's free public
+// demo server. Returns "—" silently on failure (the public server is best-
+// effort and may rate-limit). Tweak CFG.driveOrigin to change the origin.
+async function fetchDriveTime(lat, lng) {
+  const orig = CFG.driveOrigin;
+  const valEl = document.getElementById('drive-time-val');
+  const distEl = document.getElementById('drive-time-dist');
+  if (!valEl) return;
+
+  // Quick sanity: skip if the destination is the origin (within ~1km)
+  const directKm = haversine([orig.lng, orig.lat], [lng, lat]) * 1.609;
+  if (directKm < 1) {
+    valEl.textContent = '—';
+    distEl.textContent = '(at origin)';
+    return;
+  }
+  // Same hemisphere check — OSRM public demo only routes within the world
+  // graph, but very long routes (>1500mi) are likely to time out; show a
+  // dash-line distance instead in those cases.
+  if (directKm > 2400) {
+    valEl.textContent = '—';
+    distEl.textContent = `${(directKm * 0.621).toFixed(0)} mi straight-line`;
+    return;
+  }
+
+  const url = `https://router.project-osrm.org/route/v1/driving/${orig.lng},${orig.lat};${lng},${lat}?overview=false`;
+  try {
+    const r = await fetch(url);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if (!data.routes || !data.routes[0]) throw new Error('no route');
+    const route = data.routes[0];
+    const seconds = route.duration;
+    const meters = route.distance;
+    const hours = Math.floor(seconds / 3600);
+    const mins = Math.round((seconds - hours * 3600) / 60);
+    const miles = (meters / 1609.34).toFixed(0);
+    valEl.textContent = hours > 0 ? `${hours}h ${mins}min` : `${mins} min`;
+    distEl.textContent = `${miles} mi`;
+  } catch (e) {
+    valEl.textContent = '—';
+    distEl.textContent = `${(directKm * 0.621).toFixed(0)} mi straight-line`;
+  }
 }
 
 function compassFromDeg(deg) {
@@ -4080,6 +4280,7 @@ async function tryManifest() {
       const file = typeof entry === 'string' ? entry : entry.file;
       const name = typeof entry === 'string' ? null : entry.name;
       const grouped = typeof entry === 'object' && entry.grouped === true;
+      const groupByGeomType = typeof entry === 'object' && entry.groupByGeomType === true;
       if (!file) continue;
       const url = `./gpx/${file}`;
       // Dedupe: if any tracks with this source URL are already loaded
@@ -4100,7 +4301,7 @@ async function tryManifest() {
         if (S.map.getSource(`track-${id}-wpt-src`)) S.map.removeSource(`track-${id}-wpt-src`);
         S.tracks.delete(id);
       }
-      const t = await loadGPXFromURL(url, name, { grouped });
+      const t = await loadGPXFromURL(url, name, { grouped, groupByGeomType });
       if (t) {
         // A single GPX file can produce multiple sibling tracks now.
         // Pin them all and apply persisted style overrides (keyed by source URL,
