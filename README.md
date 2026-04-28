@@ -1,6 +1,6 @@
 # Backcountry
 
-A self-hosted backcountry web map. Single HTML file, no build step, no backend, no API keys. Designed to replace an onX subscription for personal use — your GPX library lives in your own GitHub repo, the map renders in any modern browser, and every dependency is loaded from a public CDN.
+A self-hosted backcountry web map. Single HTML file, no build step, no backend, no API keys. 
 
 ![status](https://img.shields.io/badge/status-personal%20tool-FF6B35?style=flat-square)
 ![deps](https://img.shields.io/badge/build_step-none-4ade80?style=flat-square)
@@ -10,20 +10,20 @@ A self-hosted backcountry web map. Single HTML file, no build step, no backend, 
 
 ## What's in here
 
-- **Full GPX support** — tracks, routes, AND waypoints. Drag-and-drop, multi-load, auto-load via a manifest, optional `localStorage` persistence
-- **Waypoint classification** — `<sym>` and name parsed into camp / peak / water / trailhead / view / food / hazard. Color-coded dots on the map and rich popups with name, description, elevation, and coordinates
-- **Slope angle shading** — USGS 3DEP `Slope Map` rendering. The avalanche-relevant zone (~30–45°) shows up in deep orange to red-brown
-- **Hiking trails overlay** — OSM-derived Waymarked Trails for marked routes
-- **Library (pinned) tracks** — files listed in `manifest.json` always reload fresh and stay locked at the top of the sidebar (📌). User-dropped tracks live in `localStorage` as before
-- **Drop-pin tool** — click the pin button (or press `P`), then click anywhere to mark a spot. Name it, save it, persists across sessions
-- **Elevation profiles** — Chart.js, hover-syncs a marker along the track on the map, segments colored by slope grade (green → red → pink for ≥30°, the avalanche-relevant zone)
-- **Public lands overlays** — National Forests, BLM, NPS via the USGS PAD-US authoritative dataset (server-side filtered by manager); Wilderness Areas via USFS EDW
-- **Weather** — right-click (or long-press on touch) any point for current conditions + 7-day forecast from Open-Meteo, with a CAIC link that auto-routes to the Colorado state forecast for points inside CO
-- **3D terrain** — AWS Terrarium DEM tiles, hillshade as a separate toggleable layer
-- **Three basemaps** — OpenFreeMap Liberty (topo), ESRI World Imagery (satellite + labels), CartoDB dark
-- **Geocoding** — Nominatim search
-- **Shareable URLs** — the map's lat/lng/zoom/pitch/bearing live in the URL hash
-- **Mobile-friendly** — sidebar collapses to a bottom sheet on narrow screens; long-press for weather
+- **Full GPX support** - tracks, routes, AND waypoints. Drag-and-drop, multi-load, auto-load via a manifest, optional `localStorage` persistence
+- **Waypoint classification** - `<sym>` and name parsed into camp / peak / water / trailhead / view / food / hazard. Color-coded dots on the map and rich popups with name, description, elevation, and coordinates
+- **Slope angle shading** - USGS 3DEP `Slope Map` rendering. The avalanche-relevant zone (~30–45°) shows up in deep orange to red-brown
+- **Hiking trails overlay** - OSM-derived Waymarked Trails for marked routes
+- **Library (pinned) tracks** - files listed in `manifest.json` always reload fresh and stay locked at the top of the sidebar (📌). User-dropped tracks live in `localStorage` as before
+- **Drop-pin tool** - click the pin button (or press `P`), then click anywhere to mark a spot. Name it, save it, persists across sessions
+- **Elevation profiles** - Chart.js, hover-syncs a marker along the track on the map, segments colored by slope grade (green → red → pink for ≥30°, the avalanche-relevant zone)
+- **Public lands overlays** - National Forests, BLM, NPS via the USGS PAD-US authoritative dataset (server-side filtered by manager); Wilderness Areas via USFS EDW
+- **Weather** - right-click (or long-press on touch) any point for current conditions + 7-day forecast from Open-Meteo, with a CAIC link that auto-routes to the Colorado state forecast for points inside CO
+- **3D terrain** - AWS Terrarium DEM tiles, hillshade as a separate toggleable layer
+- **Three basemaps** - OpenFreeMap Liberty (topo), ESRI World Imagery (satellite + labels), CartoDB dark
+- **Geocoding** - Nominatim search
+- **Shareable URLs** - the map's lat/lng/zoom/pitch/bearing live in the URL hash
+- **Mobile-friendly** - sidebar collapses to a bottom sheet on narrow screens; long-press for weather
 
 ---
 
@@ -33,7 +33,7 @@ Two ways to get tracks on the map:
 
 ### Library (always-loaded, pinned)
 
-Files listed in `/manifest.json` auto-load every time the page opens, are marked with 📌 in the sidebar, and can't be deleted from the UI. They reload fresh from `/gpx/` on each page open — edit the file in the repo, push, refresh, and the new version is live.
+Files listed in `/manifest.json` auto-load every time the page opens, are marked with 📌 in the sidebar, and can't be deleted from the UI. They reload fresh from `/gpx/` on each page open - edit the file in the repo, push, refresh, and the new version is live.
 
 The default `manifest.json` reserves two slots for a personal library:
 
@@ -72,7 +72,7 @@ Waypoint name labels appear at zoom 11+ (regional / detail view) so they don't c
 
 Click the pin button in the map toolbar (or press `P`), then click anywhere on the map. You'll be prompted for a name; the pin saves to `localStorage` and reappears across sessions. Click an existing pin to see its name, coordinates, and a remove button.
 
-Pins are independent of GPX tracks — they're just lightweight personal markers. Useful for "remember this trailhead," "note this spring," or marking somewhere you saw avy debris that didn't make it onto a track.
+Pins are independent of GPX tracks - they're just lightweight personal markers. Useful for "remember this trailhead," "note this spring," or marking somewhere you saw avy debris that didn't make it onto a track.
 
 `Esc` cancels pin-drop mode without dropping anything.
 
@@ -84,14 +84,14 @@ The Slope Angle layer pulls from USGS 3DEP elevation data and shades terrain by 
 
 | Color | Slope | What it means for skiing |
 |---|---|---|
-| Gray | 0–15° | Flat / mellow — generally safe but boring |
-| Light yellow | 15–25° | Gentle terrain — safe but not steep enough to slide |
+| Gray | 0–15° | Flat / mellow - generally safe but boring |
+| Light yellow | 15–25° | Gentle terrain - safe but not steep enough to slide |
 | Light orange | 25–30° | Lower limit of avalanche terrain |
-| Orange / brown | 30–35° | **Sweet spot for slab avalanches** — pay attention |
+| Orange / brown | 30–35° | **Sweet spot for slab avalanches** - pay attention |
 | Red-brown | 35–45° | **Most avalanche-prone zone** |
 | Dark red | 45°+ | Too steep to often slide as a slab; new concerns (sluffs, falls) |
 
-This is server-rendered raster, so panning and zooming is instant. **It does not replace a CAIC forecast or trained avalanche judgment** — but it's the single most useful map layer for picking lines or recognizing terrain traps.
+This is server-rendered raster, so panning and zooming is instant. **It does not replace a CAIC forecast or trained avalanche judgment** - but it's the single most useful map layer for picking lines or recognizing terrain traps.
 
 ---
 
@@ -126,7 +126,7 @@ On the map: **right-click** for weather (desktop), **long-press** for weather (t
 | Geocoding | [Nominatim](https://nominatim.openstreetmap.org) | OSM, please respect their fair-use policy |
 | Avalanche forecasts | [CAIC](https://avalanche.state.co.us) (Colorado), [avalanche.org](https://avalanche.org) (everywhere else) | Direct links, no integration |
 
-PAD-US replaced the BLM `BLM_Natl_SMA_LimitedScale` service that ships with most ArcGIS demos — that one has a `minScale` of 1:36K, meaning it only renders when zoomed in past zoom 14 and is invisible at any normal regional view. PAD-US has no such restriction and renders correctly from world view to detail.
+PAD-US replaced the BLM `BLM_Natl_SMA_LimitedScale` service that ships with most ArcGIS demos - that one has a `minScale` of 1:36K, meaning it only renders when zoomed in past zoom 14 and is invisible at any normal regional view. PAD-US has no such restriction and renders correctly from world view to detail.
 
 ---
 
@@ -160,7 +160,7 @@ const CFG = {
 };
 ```
 
-PAD-US `Mang_Name` values include `BLM`, `NPS`, `USFS`, `FWS`, `USACE`, `USBR`, `BIA`, `DOD`, `STAT_LAND` (state lands), `LOC_LAND` (local), and many more. Add a new layer toggle by adding a new entry under `CFG.layers` with the manager you want — no other code changes needed.
+PAD-US `Mang_Name` values include `BLM`, `NPS`, `USFS`, `FWS`, `USACE`, `USBR`, `BIA`, `DOD`, `STAT_LAND` (state lands), `LOC_LAND` (local), and many more. Add a new layer toggle by adding a new entry under `CFG.layers` with the manager you want - no other code changes needed.
 
 The `LANDS_Z_ORDER` array near the top of the script controls how layers stack: earlier entries draw lower. Default order is slope → public-land fills → trails → tracks. Reorder if you want trails under fills, etc.
 
@@ -169,9 +169,9 @@ The `LANDS_Z_ORDER` array near the top of the script controls how layers stack: 
 ## Performance notes
 
 - Tracks with >2000 points are downsampled to ~600 points for the elevation profile (the map keeps full resolution)
-- Elevation gain is computed on a 7-window smoothed series with a 1m noise threshold — this matches what most GPS apps report rather than the inflated raw-sum number
+- Elevation gain is computed on a 7-window smoothed series with a 1m noise threshold - this matches what most GPS apps report rather than the inflated raw-sum number
 - `localStorage` is capped at ~4MB; library (pinned) tracks are NOT counted against this since they always reload fresh from `/gpx/`. Only dropped tracks persist
-- Public-lands layers are raster (ArcGIS `export` endpoint) and only redrawn when toggled on, the bbox changes, or you zoom — they don't tax the renderer when off
+- Public-lands layers are raster (ArcGIS `export` endpoint) and only redrawn when toggled on, the bbox changes, or you zoom - they don't tax the renderer when off
 - Waypoints render as a dedicated `circle` layer with zoom-interpolated radius; thousands of points render smoothly
 
 ---
@@ -184,8 +184,8 @@ Tested on recent Chrome, Safari (desktop + iOS), Firefox, Edge. Requires WebGL2.
 
 ## License & attribution
 
-The code in this repo is yours to do whatever you want with. The data sources have their own attributions, which the map shows in the bottom-right corner — please leave those visible. CartoDB, OpenFreeMap, OSM/Nominatim, and Waymarked Trails in particular are donation-supported; consider tossing them a few bucks if this becomes part of your daily kit.
+The code in this repo is yours to do whatever you want with. The data sources have their own attributions, which the map shows in the bottom-right corner - please leave those visible. CartoDB, OpenFreeMap, OSM/Nominatim, and Waymarked Trails in particular are donation-supported; consider tossing them a few bucks if this becomes part of your daily kit.
 
 ---
 
-*Built for people who'd rather own their map than rent it.*
+*Built for chill guys*
