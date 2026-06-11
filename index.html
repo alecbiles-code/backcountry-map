@@ -994,23 +994,236 @@
     cursor: pointer;
   }
 
+  /* === CONDITIONS HERO CARD === */
+  .conditions-card {
+    background: linear-gradient(160deg, rgba(74,158,255,0.08) 0%, var(--bg-card) 45%);
+    border: 1px solid var(--border);
+    border-radius: var(--r-lg);
+    padding: 12px 14px 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .conditions-card::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(115deg, transparent 0 22px, rgba(255,255,255,0.015) 22px 23px);
+    pointer-events: none;
+  }
+  .cond-top { display: flex; align-items: center; gap: 12px; }
+  .cond-icon { font-size: 34px; line-height: 1; flex-shrink: 0; }
+  .cond-temp {
+    font-family: var(--font-mono);
+    font-size: 26px; font-weight: 600; letter-spacing: -0.02em; line-height: 1;
+  }
+  .cond-desc { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+  .cond-right { margin-left: auto; text-align: right; }
+  .cond-loc {
+    font-family: var(--font-mono); font-size: 9px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .cond-meta {
+    font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim); margin-top: 4px;
+  }
+  .cond-refresh {
+    width: 22px; height: 22px; border-radius: 5px;
+    color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center;
+    transition: all var(--t-fast); margin-top: 4px;
+  }
+  .cond-refresh:hover { color: var(--accent); background: rgba(255,255,255,0.05); }
+  .cond-refresh.spinning svg { animation: spin 0.8s linear infinite; }
+  .caic-chip {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 10px; padding: 7px 10px;
+    background: rgba(0,0,0,0.25);
+    border: 1px solid var(--border);
+    border-radius: var(--r-sm);
+    font-size: 11.5px; font-weight: 500;
+    color: var(--text-dim);
+    text-decoration: none;
+    position: relative; z-index: 1;
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+  .caic-chip:hover { border-color: var(--accent); color: var(--text); }
+  .caic-dot {
+    width: 10px; height: 10px; border-radius: 3px;
+    background: var(--border-strong); flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(0,0,0,0.4);
+  }
+  .caic-rating {
+    margin-left: auto;
+    font-family: var(--font-mono); font-size: 9.5px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .cond-loading { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); padding: 6px 0; }
+
+  /* === LAYER TOGGLE STATES === */
+  .layer-state {
+    width: 18px; height: 18px;
+    display: none;
+    align-items: center; justify-content: center;
+    flex-shrink: 0;
+    border-radius: 5px;
+    font-size: 11px;
+  }
+  .layer-toggle.loading .layer-state,
+  .layer-toggle.error .layer-state,
+  .layer-toggle.static-src .layer-state { display: inline-flex; }
+  .layer-toggle.loading .layer-state {
+    border: 2px solid var(--border-strong);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    width: 13px; height: 13px;
+    animation: spin 0.8s linear infinite;
+  }
+  .layer-toggle.error .layer-state {
+    color: #1a1d27; background: var(--warning);
+    font-weight: 700; cursor: pointer;
+  }
+  .layer-toggle.error .layer-state:hover { background: #ffe680; }
+  .layer-toggle.error .layer-label { color: var(--warning); }
+  .layer-toggle.static-src .layer-state { color: var(--success); font-size: 10px; }
+  .layer-toggle.loading .layer-swatch {
+    background-image: linear-gradient(100deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.35) 50%, rgba(255,255,255,0) 70%) !important;
+    background-size: 200% 100% !important;
+    animation: shimmer 1.2s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+
+  /* === TRACK LIST: sparklines, sections, empty state === */
+  .track-spark {
+    display: block;
+    margin: 2px 0 6px;
+    padding-left: 8px;
+    height: 22px;
+  }
+  .track-spark svg { display: block; width: 100%; height: 22px; overflow: visible; }
+  .track-spark polyline { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; opacity: 0.9; }
+  .track-spark .spark-fill { stroke: none; opacity: 0.14; }
+  .track-section-label {
+    font-family: var(--font-mono);
+    font-size: 9px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.12em;
+    padding: 8px 8px 5px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .track-section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+  .empty-state.tracks-cta {
+    padding: 26px 16px 22px;
+    border: 1.5px dashed var(--border-strong);
+    color: var(--text-dim);
+    transition: border-color var(--t-fast), background var(--t-fast);
+  }
+  .empty-state.tracks-cta svg { color: var(--text-muted); margin-bottom: 8px; }
+  .empty-state.tracks-cta .cta-title { font-weight: 600; font-size: 13px; color: var(--text); margin-bottom: 3px; }
+  .empty-state.tracks-cta .cta-sub { font-size: 11.5px; line-height: 1.55; }
+  .empty-state.tracks-cta:hover { border-color: var(--accent); background: rgba(255,107,53,0.04); cursor: pointer; }
+
+  /* === TRIP CARD === */
+  .trip-card {
+    position: absolute;
+    bottom: 40px; left: 16px;
+    width: 300px;
+    background: var(--bg-glass);
+    backdrop-filter: blur(20px) saturate(140%);
+    -webkit-backdrop-filter: blur(20px) saturate(140%);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--r-lg);
+    box-shadow: var(--shadow-lg);
+    z-index: 5;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(14px);
+    pointer-events: none;
+    transition: opacity var(--t-med), transform var(--t-med), bottom var(--t-med);
+  }
+  .trip-card.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .trip-card.raised { bottom: 248px; }
+  .trip-card-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 12px 12px 8px 14px;
+  }
+  .trip-card-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+  .trip-card-name {
+    font-weight: 600; font-size: 13px; flex: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .trip-card-close {
+    width: 22px; height: 22px; border-radius: 5px; color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: all var(--t-fast);
+  }
+  .trip-card-close:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+  .trip-card-spark { padding: 0 14px; height: 34px; }
+  .trip-card-spark svg { width: 100%; height: 34px; display: block; }
+  .trip-card-spark polyline { fill: none; stroke-width: 1.5; }
+  .trip-card-spark .spark-fill { stroke: none; opacity: 0.16; }
+  .trip-card-stats {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 4px; padding: 8px 14px 10px;
+  }
+  .trip-card-stat .v { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text); }
+  .trip-card-stat .l {
+    font-family: var(--font-mono); font-size: 8.5px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; display: block;
+  }
+  .trip-card-actions {
+    display: flex; border-top: 1px solid var(--border);
+  }
+  .trip-act {
+    flex: 1; padding: 9px 4px;
+    font-size: 11px; font-weight: 500; color: var(--text-dim);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    border-right: 1px solid var(--border);
+    text-decoration: none;
+    transition: all var(--t-fast);
+  }
+  .trip-act:last-child { border-right: none; }
+  .trip-act:hover { color: var(--accent); background: rgba(255,107,53,0.06); }
+  .trip-act.on { color: var(--accent); }
+  .trip-act svg { display: block; }
+
+  /* === BOTTOM SHEET PEEK (mobile) === */
+  .sheet-peek { display: none; }
+
   @media (max-width: 720px) {
     :root { --sidebar-w: 100%; }
     #app { grid-template-columns: 1fr; grid-template-rows: 1fr; }
     #sidebar {
-      position: fixed; bottom: 0; left: 0; right: 0; width: 100%; max-height: 70vh;
-      border-right: none; border-top: 1px solid var(--border);
+      position: fixed; bottom: 0; left: 0; right: 0; width: 100%;
+      height: 86dvh; max-height: 86dvh;
+      border-right: none; border-top: 1px solid var(--border-strong);
       border-top-left-radius: 18px; border-top-right-radius: 18px;
-      transform: translateY(calc(100% - 56px));
+      box-shadow: 0 -12px 40px rgba(0,0,0,0.5);
+      /* JS-driven sheet: default = collapsed handle. setupBottomSheet() takes over. */
+      transform: translateY(calc(100% - 64px));
       transition: transform var(--t-med); z-index: 20;
     }
+    #sidebar.dragging { transition: none; }
     #sidebar.open { transform: translateY(0); }
-    .sidebar-header { cursor: pointer; position: relative; }
-    .sidebar-header::before {
-      content: ''; position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
-      width: 36px; height: 4px; background: var(--border-strong); border-radius: 2px;
+    .sidebar-header {
+      cursor: grab; position: relative;
+      touch-action: none;
+      padding-top: 22px;
     }
+    .sidebar-header:active { cursor: grabbing; }
+    .sidebar-header::before {
+      content: ''; position: absolute; top: 8px; left: 50%; transform: translateX(-50%);
+      width: 40px; height: 4px; background: var(--border-strong); border-radius: 2px;
+    }
+    .sheet-peek {
+      display: flex; align-items: center; gap: 10px;
+      margin-left: auto;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    }
+    .sheet-peek .peek-temp { font-size: 14px; font-weight: 600; color: var(--text); }
+    .sheet-peek .peek-sep { color: var(--text-muted); }
+    .sidebar-header .brand { padding-right: 6px; }
+    .sidebar-content { overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+    #sidebar:not(.at-full) .sidebar-content { overflow-y: hidden; }
     .sidebar-toggle { display: none; }
+    .trip-card { left: 12px; right: 12px; width: auto; bottom: 76px; }
+    .trip-card.raised { bottom: 232px; }
     .weather-panel { width: calc(100vw - 32px); right: 16px; top: 70px; }
     .map-controls { top: 122px; }
     .top-bar { right: 16px; }
@@ -1035,9 +1248,15 @@
           <div>ALEC'S</div>
           <div class="brand-meta">backcountry map</div>
         </div>
+        <div class="sheet-peek" id="sheet-peek"></div>
       </div>
     </div>
     <div class="sidebar-content">
+      <div class="panel">
+        <div class="conditions-card" id="conditions-card">
+          <div class="cond-loading">Reading conditions…</div>
+        </div>
+      </div>
       <div class="panel">
         <button class="load-gpx" id="btn-load-gpx">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -1162,6 +1381,19 @@
       </div>
     </div>
 
+    <div class="trip-card" id="trip-card">
+      <div class="trip-card-header">
+        <span class="trip-card-dot" id="trip-dot"></span>
+        <span class="trip-card-name" id="trip-name"></span>
+        <button class="trip-card-close" id="trip-close" title="Deselect track">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="6" y1="6" x2="18" y2="18"/><line x1="6" y1="18" x2="18" y2="6"/></svg>
+        </button>
+      </div>
+      <div class="trip-card-spark" id="trip-spark"></div>
+      <div class="trip-card-stats" id="trip-stats"></div>
+      <div class="trip-card-actions" id="trip-actions"></div>
+    </div>
+
     <div class="status-bar">
       <div class="status-item clickable-coords" id="copy-coords" title="Click to copy lat,lng">
         <span class="lbl">LAT</span><span class="v" id="stat-lat">—</span>
@@ -1262,12 +1494,27 @@ const CFG = {
       kind: 'feature-query',
       label: 'National Forests',
       color: '#3d6b46',
+      // Static-first: if ./data/forests.geojson exists in the repo (pre-baked,
+      // e.g. with mapshaper from the USFS source), it is loaded once and the
+      // runtime ArcGIS queries are skipped entirely. Delete the file to fall
+      // back to live viewport queries.
+      staticUrl: './data/forests.geojson',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
       whereField: 'Agency',
       whereValue: 'U.S. Forest Service',
       outFields: 'Agency,unit_name',
       nameField: 'unit_name',
       agencyField: 'Agency',
+      // Fallback endpoint (authoritative USFS server) if Living Atlas starts
+      // demanding auth. Field names differ, hence the per-fallback mapping.
+      fallback: {
+        featureUrl: 'https://apps.fs.usda.gov/arcx/rest/services/EDW/EDW_ForestSystemBoundaries_01/MapServer/0/query',
+        whereField: null, whereValue: null,
+        outFields: 'FORESTNAME',
+        nameField: 'FORESTNAME',
+        agencyField: null,
+        attribution: 'USFS EDW',
+      },
       opacity: 0.45,
       attribution: 'USA Federal Lands \u00b7 Esri Living Atlas',
     },
@@ -1275,12 +1522,21 @@ const CFG = {
       kind: 'feature-query',
       label: 'BLM Land',
       color: '#d4a017',
+      staticUrl: './data/blm.geojson',
       featureUrl: 'https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/USA_Federal_Lands/FeatureServer/0/query',
       whereField: 'Agency',
       whereValue: 'Bureau of Land Management',
       outFields: 'Agency,unit_name',
       nameField: 'unit_name',
       agencyField: 'Agency',
+      fallback: {
+        featureUrl: 'https://gis.blm.gov/arcgis/rest/services/lands/BLM_Natl_SMA_LimitedScale/MapServer/1/query',
+        whereField: 'ADMIN_AGENCY_CODE', whereValue: 'BLM',
+        outFields: 'ADMIN_UNIT_NAME,ADMIN_AGENCY_CODE',
+        nameField: 'ADMIN_UNIT_NAME',
+        agencyField: 'ADMIN_AGENCY_CODE',
+        attribution: 'BLM National SMA',
+      },
       opacity: 0.45,
       attribution: 'USA Federal Lands \u00b7 Esri Living Atlas',
     },
@@ -1294,6 +1550,15 @@ const CFG = {
       outFields: 'UNIT_NAME,UNIT_TYPE,UNIT_CODE',
       nameField: 'UNIT_NAME',
       agencyField: 'UNIT_TYPE',
+      staticUrl: './data/parks.geojson',
+      fallback: {
+        featureUrl: 'https://mapservices.nps.gov/arcgis/rest/services/LandResourcesDivisionTractAndBoundaryService/MapServer/2/query',
+        whereField: null, whereValue: null,
+        outFields: 'UNIT_NAME,UNIT_TYPE,UNIT_CODE',
+        nameField: 'UNIT_NAME',
+        agencyField: 'UNIT_TYPE',
+        attribution: 'NPS (mapservices.nps.gov)',
+      },
       opacity: 0.55,
       attribution: 'NPS Land Resources Division',
     },
@@ -1312,7 +1577,9 @@ const CFG = {
       color: '#FF9F5A',
       contours: [60, 120, 180, 240],
       contourColors: ['#6BCB77', '#FFD93D', '#FF9F5A', '#FF6B35'],
-      opacity: 0.18,
+      // Bands are donuts now (no overlap), so each band can carry real opacity
+      // without colors compounding.
+      opacity: 0.28,
       attribution: 'Valhalla \u00b7 FOSSGIS',
     },
   },
@@ -1636,7 +1903,18 @@ async function initMap() {
     _layerErrSeen.set(sourceId, now);
     const reason = (e.error && e.error.message) || 'tile request failed';
     toast(`${cfg.label}: ${reason}`, 'error', 5000);
+    setLayerState(key, 'error', `${cfg.label}: ${reason}`);
     console.warn(`[layer:${key}]`, e);
+  });
+
+  // Clears the loading shimmer on raster lands layers once tiles arrive.
+  S.map.on('sourcedata', (e) => {
+    if (!e.sourceId || !e.sourceId.startsWith('lands-') || !e.isSourceLoaded) return;
+    const key = e.sourceId.replace('lands-', '');
+    const cfg = CFG.layers[key];
+    if (!cfg || cfg.kind === 'feature-query' || cfg.kind === 'isochrone') return;
+    const tog = document.querySelector(`.layer-toggle[data-key="${key}"]`);
+    if (tog && tog.classList.contains('loading')) setLayerState(key, 'ok');
   });
 
   S.map.on('click', (e) => {
@@ -1818,10 +2096,67 @@ function makeToggle({ label, sub, color, on, dataT, onChange }) {
   el.innerHTML = `
     <div class="layer-swatch" style="background:${color}"></div>
     <div class="layer-label">${label}<span class="sub">${sub}</span></div>
+    <div class="layer-state"></div>
     <div class="switch"></div>
   `;
-  el.onclick = () => { const newOn = !el.classList.contains('on'); onChange(newOn); };
+  el.onclick = (e) => {
+    // Amber badge = degraded; clicking it retries instead of toggling.
+    if (e.target.closest('.layer-state') && el.classList.contains('error') && el.dataset.key) {
+      e.stopPropagation();
+      retryLayer(el.dataset.key);
+      return;
+    }
+    const newOn = !el.classList.contains('on');
+    onChange(newOn);
+  };
   return el;
+}
+
+// ------------------------------------------------------------
+// Layer status — every lands toggle is a tiny state machine:
+//   idle -> loading (shimmer + spinner) -> ok | error (amber, click to retry)
+//   'static' marks a layer served from pre-baked repo GeoJSON.
+// The toast was never enough: a silently blank layer looked identical to an
+// empty viewport. Now the failure lives on the toggle itself.
+// ------------------------------------------------------------
+function setLayerState(key, state, title) {
+  const tog = document.querySelector(`.layer-toggle[data-key="${key}"]`);
+  if (!tog) return;
+  tog.classList.remove('loading', 'error', 'static-src');
+  const st = tog.querySelector('.layer-state');
+  if (!st) return;
+  st.textContent = '';
+  st.title = title || '';
+  if (state === 'loading') {
+    tog.classList.add('loading');
+  } else if (state === 'error') {
+    tog.classList.add('error');
+    st.textContent = '!';
+    st.title = (title || 'Layer failed to load') + ' \u2014 click to retry';
+  } else if (state === 'static') {
+    tog.classList.add('static-src');
+    st.textContent = '\u25C9';
+    st.title = title || 'Served from bundled data (no network dependency)';
+  }
+}
+
+function retryLayer(key) {
+  const cfg = CFG.layers[key];
+  if (!cfg || !S.layers[key]) return;
+  setLayerState(key, 'loading');
+  if (cfg.kind === 'feature-query') {
+    _flLastKey.delete(key);
+    _flStatic.delete(key);
+    initFeatureLayerData(key, cfg);
+  } else if (cfg.kind === 'isochrone') {
+    addIsochroneLayer(key, cfg).catch(err => {
+      setLayerState(key, 'error', `Isochrone: ${err.message || 'load failed'}`);
+    });
+  } else {
+    // Raster: tear the source down and re-add so MapLibre re-requests tiles.
+    setLayer(key, false);
+    setLayer(key, true);
+  }
 }
 
 // ============================================================
@@ -1859,12 +2194,15 @@ function setLayer(key, on, force = false) {
     const kind = cfg.kind || 'arcgis-export';
 
     if (kind === 'isochrone') {
-      addIsochroneLayer(key, cfg).catch(err => {
-        console.warn('[isochrone] failed', err);
-        toast(`Isochrone: ${err.message || 'load failed'}`, 'error', 5000);
-        S.layers[key] = false;
-        if (tog) tog.classList.remove('on');
-      });
+      setLayerState(key, 'loading');
+      addIsochroneLayer(key, cfg)
+        .then(() => setLayerState(key, 'ok'))
+        .catch(err => {
+          console.warn('[isochrone] failed', err);
+          // Keep the toggle ON in a degraded state so the retry affordance
+          // exists; flipping it off silently was the old (bad) behavior.
+          setLayerState(key, 'error', `Isochrone: ${err.message || 'load failed'}`);
+        });
     } else if (kind === 'feature-query') {
       // Vector: empty source + fill/line layers + a moveend listener that
       // refetches when the viewport changes.
@@ -1888,7 +2226,8 @@ function setLayer(key, on, force = false) {
           paint: { 'line-color': cfg.color, 'line-width': 1, 'line-opacity': 0.7 },
         }, beforeId);
       }
-      fetchFederalLandsViewport();
+      setLayerState(key, 'loading');
+      initFeatureLayerData(key, cfg);
       registerFederalLandsMoveEnd();
       // Click for info popup (name of the unit) — bound once per fillId to
       // prevent stacking N handlers when the layer is toggled off/on N times.
@@ -1933,9 +2272,13 @@ function setLayer(key, on, force = false) {
           id: layerId, type: 'raster', source: sourceId,
           paint: { 'raster-opacity': cfg.opacity },
         }, beforeId);
+        // Spinner until the first tiles land; cleared by the 'sourcedata'
+        // listener in initMap, or flipped to error by the 'error' listener.
+        setLayerState(key, 'loading');
       }
     }
   } else {
+    setLayerState(key, 'ok');
     if (cfg && cfg.kind === 'isochrone') {
       removeIsochroneLayer(key);
     } else {
@@ -1944,11 +2287,13 @@ function setLayer(key, on, force = false) {
       }
       if (S.map.getSource(sourceId)) S.map.removeSource(sourceId);
     }
+    _flLastKey.delete(key);
     const anyVectorOn = Object.entries(CFG.layers).some(([k, c]) =>
       c.kind === 'feature-query' && S.layers[k]);
     if (!anyVectorOn) unregisterFederalLandsMoveEnd();
   }
   updateLegend();
+  updateSheetPeek();
   Store.saveSettings();
 }
 
@@ -2001,38 +2346,74 @@ async function fetchIsochrones(origin, contours) {
   return data;
 }
 
+function isoOuterRings(geom) {
+  // Valhalla with polygons:true is essentially always a simple Polygon per
+  // contour, but stay defensive: for MultiPolygons take every outer ring.
+  if (!geom) return [];
+  if (geom.type === 'Polygon') return [geom.coordinates[0]];
+  if (geom.type === 'MultiPolygon') return geom.coordinates.map(p => p[0]);
+  return [];
+}
+
+function isoHourLabel(minutes) {
+  const h = minutes / 60;
+  return Number.isInteger(h) ? `${h} HR` : `${minutes} MIN`;
+}
+
 async function addIsochroneLayer(key, cfg) {
   const origin = CFG.driveOrigin;
   let data = loadIsoCache(origin);
   if (!data) {
-    toast(`Loading drive-time rings from ${origin.label}\u2026`, 'info', 4000);
     data = await fetchIsochrones(origin, cfg.contours);
     saveIsoCache(origin, data);
   }
-  // Paint biggest ring first so smaller rings layer on top — otherwise
-  // the inner rings get hidden by the outer polygons.
-  // NOTE: Valhalla may return contour values as strings ("60") or numbers.
-  // Normalise to Number for sorting and indexOf comparisons.
+  // Sort contours descending (largest disk first). Valhalla FOSSGIS returns
+  // contour values as strings ("60"); Number() everywhere or indexOf lies.
   const features = (data.features || []).slice().sort((a, b) => {
     const ta = Number(a.properties?.contour ?? a.properties?.value ?? 0);
     const tb = Number(b.properties?.contour ?? b.properties?.value ?? 0);
-    return tb - ta;  // descending: largest ring first in layer stack
+    return tb - ta;
   });
+
+  // ---- Donut bands ----
+  // Each band = outer ring of contour N with the next-smaller contour's outer
+  // ring(s) punched out as holes. No overlap, no alpha compounding: every band
+  // renders its true color at cfg.opacity. The innermost contour stays a disk.
+  const labelFeatures = [];
   for (let i = 0; i < features.length; i++) {
     const f = features[i];
-    // Coerce to Number — Valhalla FOSSGIS returns string contour values
     const raw = f.properties?.contour ?? f.properties?.value;
-    // fallback: after descending sort, index 0 = largest contour
     const minutes = raw != null ? Number(raw) : cfg.contours[cfg.contours.length - 1 - i];
     const idx = cfg.contours.indexOf(minutes);
     const color = cfg.contourColors[idx >= 0 ? idx : (cfg.contours.length - 1 - i)] || cfg.color;
+    const inner = features[i + 1] || null;
+    const innerMinutes = inner ? Number(inner.properties?.contour ?? inner.properties?.value ?? 0) : 0;
+
+    const outers = isoOuterRings(f.geometry);
+    if (!outers.length) continue;
+    const holes = inner ? isoOuterRings(inner.geometry) : [];
+    // Holes are attached to the largest outer ring (exact for the
+    // single-polygon case, harmless otherwise: a hole outside a ring is a
+    // no-op in earcut).
+    let largestIdx = 0, largestLen = -1;
+    outers.forEach((r, j) => { if (r.length > largestLen) { largestLen = r.length; largestIdx = j; } });
+    const polygons = outers.map((ring, j) =>
+      j === largestIdx ? [ring, ...holes] : [ring]);
+    const bandGeom = polygons.length === 1
+      ? { type: 'Polygon', coordinates: polygons[0] }
+      : { type: 'MultiPolygon', coordinates: polygons };
+
     const srcId = `lands-${key}-iso-${minutes}`;
     const fillId = `${srcId}-fill`;
     const lineId = `${srcId}-line`;
     if (!S.map.getSource(srcId)) {
       S.map.addSource(srcId, {
         type: 'geojson',
-        data: { type: 'FeatureCollection', features: [{ ...f, properties: { ...f.properties, _minutes: minutes } }] },
+        data: { type: 'FeatureCollection', features: [{
+          type: 'Feature',
+          geometry: bandGeom,
+          properties: { _minutes: minutes, _innerMinutes: innerMinutes },
+        }] },
         attribution: cfg.attribution || cfg.label,
       });
     }
@@ -2043,16 +2424,32 @@ async function addIsochroneLayer(key, cfg) {
     }
     if (!S.map.getLayer(lineId)) {
       S.map.addLayer({ id: lineId, type: 'line', source: srcId,
-        paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': 0.7 } }, beforeId);
+        paint: { 'line-color': color, 'line-width': 1.5, 'line-opacity': 0.85 } }, beforeId);
     }
+
+    // Ring perimeters double as label tracks ("1 HR" repeated along the ring,
+    // range-ring style). Collected into one symbol source below.
+    for (const ring of outers) {
+      labelFeatures.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: ring },
+        properties: { label: isoHourLabel(minutes), color },
+      });
+    }
+
     if (!_isoBoundClicks.has(fillId)) {
       S.map.on('click', fillId, (e) => {
-        const m = e.features[0]?.properties?._minutes ?? minutes;
-        const h = Math.floor(m / 60), mins = m % 60;
-        const label = h > 0 ? `${h}h ${mins ? mins + 'min' : ''}`.trim() : `${mins} min`;
+        const p = e.features[0]?.properties || {};
+        const m = p._minutes ?? minutes;
+        const im = p._innerMinutes ?? 0;
+        const fmtHr = (mins) => {
+          const h = Math.floor(mins / 60), mm = mins % 60;
+          return h > 0 ? `${h}h${mm ? ' ' + mm + 'min' : ''}` : `${mm} min`;
+        };
+        const rangeText = im > 0 ? `${fmtHr(im)} \u2013 ${fmtHr(m)}` : `Within ${fmtHr(m)}`;
         new maplibregl.Popup({ offset: 8, maxWidth: '220px' })
           .setLngLat(e.lngLat)
-          .setHTML(`<div style="font-weight:600;font-size:13px;color:${color}">Within ${label}</div>
+          .setHTML(`<div style="font-weight:600;font-size:13px;color:${color}">${rangeText}</div>
             <div style="font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim)">driving from ${escapeHtml(origin.label)}</div>`)
           .addTo(S.map);
       });
@@ -2060,6 +2457,38 @@ async function addIsochroneLayer(key, cfg) {
       S.map.on('mouseleave', fillId, () => S.map.getCanvas().style.cursor = '');
       _isoBoundClicks.add(fillId);
     }
+  }
+
+  // On-map ring labels, rotated along the perimeter.
+  const labelSrcId = `lands-${key}-iso-labels`;
+  const labelLayerId = `${labelSrcId}-sym`;
+  if (!S.map.getSource(labelSrcId)) {
+    S.map.addSource(labelSrcId, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: labelFeatures },
+    });
+  } else {
+    S.map.getSource(labelSrcId).setData({ type: 'FeatureCollection', features: labelFeatures });
+  }
+  if (!S.map.getLayer(labelLayerId)) {
+    S.map.addLayer({
+      id: labelLayerId, type: 'symbol', source: labelSrcId,
+      layout: {
+        'symbol-placement': 'line',
+        'symbol-spacing': 420,
+        'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Regular', 'Open Sans Regular', 'Arial Unicode MS Regular'],
+        'text-size': 11,
+        'text-letter-spacing': 0.18,
+        'text-allow-overlap': false,
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': ['get', 'color'],
+        'text-halo-color': 'rgba(5,7,9,0.9)',
+        'text-halo-width': 1.8,
+      },
+    }, firstTrackLayerId() || firstSymbolLayerId());
   }
 }
 
@@ -2074,6 +2503,9 @@ function removeIsochroneLayer(key) {
     if (S.map.getSource(srcId)) S.map.removeSource(srcId);
     _isoBoundClicks.delete(fillId);
   }
+  const labelSrcId = `lands-${key}-iso-labels`;
+  if (S.map.getLayer(`${labelSrcId}-sym`)) S.map.removeLayer(`${labelSrcId}-sym`);
+  if (S.map.getSource(labelSrcId)) S.map.removeSource(labelSrcId);
 }
 
 // ============================================================
@@ -2082,24 +2514,93 @@ function removeIsochroneLayer(key) {
 const _flMoveEnd = { fn: null };
 const _flAbort = new Map();
 const _flLastKey = new Map();
+// 'static' = layer is served from a pre-baked ./data/{key}.geojson in the
+// repo (one fetch, no viewport churn, immune to ArcGIS auth drift).
+// 'live' = static file absent; fall through to viewport feature queries.
+const _flStatic = new Map();
+const _flStaticData = new Map();
+// Remembers which layers had to fail over, so subsequent viewport fetches go
+// straight to the working endpoint instead of re-failing the primary.
+const _flUseFallback = new Set();
 
 function viewportKey() {
   const b = S.map.getBounds();
   return `${b.getWest().toFixed(3)},${b.getSouth().toFixed(3)},${b.getEast().toFixed(3)},${b.getNorth().toFixed(3)}`;
 }
 
-async function fetchFederalLandsViewport() {
+// Entry point when a feature-query layer turns on (or is retried):
+// 1) try the static file once; 2) otherwise start live viewport fetching.
+async function initFeatureLayerData(key, cfg) {
+  if (!_flStatic.has(key) && cfg.staticUrl) {
+    try {
+      const r = await fetch(cfg.staticUrl, { cache: 'force-cache' });
+      if (r.ok) {
+        const gj = await r.json();
+        if (gj && gj.type === 'FeatureCollection') {
+          _flStatic.set(key, 'static');
+          _flStaticData.set(key, gj);
+          const src = S.map.getSource(`lands-${key}`);
+          if (src) src.setData(gj);
+          setLayerState(key, 'static', `${cfg.label}: bundled data (${(gj.features || []).length} features)`);
+          return;
+        }
+      }
+    } catch (e) { /* no static file — fine, go live */ }
+    _flStatic.set(key, 'live');
+  }
+  if (_flStatic.get(key) === 'static') {
+    // Re-hydrate (basemap switches recreate the source empty).
+    const cached = _flStaticData.get(key);
+    const src = S.map.getSource(`lands-${key}`);
+    if (cached && src) src.setData(cached);
+    setLayerState(key, 'static');
+    return;
+  }
+  fetchFederalLandsViewport(true);
+}
+
+async function fetchFederalLandsViewport(force = false) {
   if (S.map.getZoom() < 5) return;
   const k = viewportKey();
   const wanted = Object.entries(CFG.layers)
-    .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k]);
+    .filter(([k, c]) => c.kind === 'feature-query' && S.layers[k] && _flStatic.get(k) !== 'static');
   for (const [key, cfg] of wanted) {
-    if (_flLastKey.get(key) === k) continue;
+    if (!force && _flLastKey.get(key) === k) continue;
     _flLastKey.set(key, k);
     fetchOneLayer(key, cfg).catch(err => {
       if (err.name !== 'AbortError') console.warn(`[${key}] fetch failed`, err);
     });
   }
+}
+
+function esriQueryUrl(endpoint, bounds, outFields, whereField, whereValue) {
+  const params = new URLSearchParams({
+    geometry: `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`,
+    geometryType: 'esriGeometryEnvelope',
+    inSR: '4326',
+    // outSR omitted: GeoJSON output is always WGS84; some Esri endpoints
+    // reject outSR when combined with f=geojson.
+    spatialRel: 'esriSpatialRelIntersects',
+    outFields: outFields || '*',
+    returnGeometry: 'true',
+    f: 'geojson',
+    resultRecordCount: '1000',
+    geometryPrecision: '5',
+  });
+  if (whereField && whereValue) {
+    params.set('where', `${whereField} = '${whereValue.replace(/'/g, "''")}'`);
+  } else {
+    params.set('where', '1=1');
+  }
+  return `${endpoint}?${params}`;
+}
+
+async function esriFetchFeatures(url, signal) {
+  const r = await fetch(url, { signal });
+  if (!r.ok) throw new Error(`HTTP ${r.status}` + (r.status === 401 || r.status === 403 || r.status === 499 ? ' \u2014 auth now required' : ''));
+  const data = await r.json();
+  if (data && data.error) throw new Error(`${data.error.message || 'service error'} (code ${data.error.code || '?'})`);
+  return (data && data.features) || [];
 }
 
 async function fetchOneLayer(key, cfg) {
@@ -2109,43 +2610,44 @@ async function fetchOneLayer(key, cfg) {
   _flAbort.set(key, ctl);
 
   const b = S.map.getBounds();
-  const params = new URLSearchParams({
-    geometry: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
-    geometryType: 'esriGeometryEnvelope',
-    inSR: '4326',
-    // outSR omitted: GeoJSON output is always WGS84; some Esri endpoints
-    // reject outSR when combined with f=geojson.
-    spatialRel: 'esriSpatialRelIntersects',
-    outFields: cfg.outFields || '*',
-    returnGeometry: 'true',
-    f: 'geojson',
-    resultRecordCount: '1000',
-    geometryPrecision: '5',
-  });
-  if (cfg.whereField && cfg.whereValue) {
-    params.set('where', `${cfg.whereField} = '${cfg.whereValue.replace(/'/g, "''")}'`);
-  } else {
-    params.set('where', '1=1');
+  setLayerState(key, 'loading');
+
+  const attempts = [];
+  if (!_flUseFallback.has(key)) {
+    attempts.push({ which: 'primary', url: esriQueryUrl(cfg.featureUrl, b, cfg.outFields, cfg.whereField, cfg.whereValue) });
+  }
+  if (cfg.fallback) {
+    attempts.push({ which: 'fallback', url: esriQueryUrl(cfg.fallback.featureUrl, b, cfg.fallback.outFields, cfg.fallback.whereField, cfg.fallback.whereValue) });
   }
 
-  const r = await fetch(`${cfg.featureUrl}?${params}`, { signal: ctl.signal });
-  if (!r.ok) {
-    const msg = `${cfg.label}: HTTP ${r.status} — service may require authentication`;
-    toast(msg, 'error', 6000);
-    console.error('[lands]', key, msg);
-    return;
+  let lastErr = null;
+  for (const a of attempts) {
+    try {
+      const features = await esriFetchFeatures(a.url, ctl.signal);
+      console.debug(`[lands] ${key} (${a.which}): ${features.length} features`);
+      const src = S.map.getSource(`lands-${key}`);
+      if (src) src.setData({ type: 'FeatureCollection', features });
+      if (a.which === 'fallback') {
+        _flUseFallback.add(key);
+        setLayerState(key, 'ok');
+        // One-time heads-up that we are on the secondary source.
+        if (!fetchOneLayer._fbToasted?.has(key)) {
+          (fetchOneLayer._fbToasted ??= new Set()).add(key);
+          toast(`${cfg.label}: primary source failed \u2014 using ${cfg.fallback.attribution || 'fallback source'}`, 'info', 4000);
+        }
+      } else {
+        setLayerState(key, 'ok');
+      }
+      return;
+    } catch (err) {
+      if (err.name === 'AbortError') return;  // superseded by a newer viewport
+      lastErr = err;
+      console.warn(`[lands] ${key} ${a.which} failed:`, err.message);
+    }
   }
-  const data = await r.json();
-  if (data && data.error) {
-    const msg = `${cfg.label}: ${data.error.message || 'service error'} (code ${data.error.code || '?'})`;
-    toast(msg, 'error', 6000);
-    console.error('[lands]', key, data.error);
-    return;
-  }
-  const features = (data && data.features) || [];
-  console.debug(`[lands] ${key}: ${features.length} features`);
-  const src = S.map.getSource(`lands-${key}`);
-  if (src) src.setData({ type: 'FeatureCollection', features });
+  const msg = `${cfg.label}: ${lastErr?.message || 'unavailable'}`;
+  setLayerState(key, 'error', msg);
+  console.error('[lands]', key, msg);
 }
 
 function registerFederalLandsMoveEnd() {
@@ -2166,8 +2668,13 @@ function federalLandClick(e) {
   const layerId = e.features[0].layer.id;
   const key = layerId.replace('lands-', '').replace('-fill', '');
   const cfg = CFG.layers[key];
-  const name = (cfg && cfg.nameField && p[cfg.nameField]) || p.unit_name || p.UNIT_NAME || p.name1 || 'Federal land';
-  const subtext = (cfg && cfg.agencyField && p[cfg.agencyField]) || cfg?.label || '';
+  const fb = cfg && cfg.fallback;
+  const name = (cfg && cfg.nameField && p[cfg.nameField])
+    || (fb && fb.nameField && p[fb.nameField])
+    || p.unit_name || p.UNIT_NAME || p.FORESTNAME || p.ADMIN_UNIT_NAME || p.name1 || 'Federal land';
+  const subtext = (cfg && cfg.agencyField && p[cfg.agencyField])
+    || (fb && fb.agencyField && p[fb.agencyField])
+    || cfg?.label || '';
   new maplibregl.Popup({ offset: 8, className: 'wpt-popup-wrap', maxWidth: '260px' })
     .setLngLat(e.lngLat)
     .setHTML(`<div class="fed-popup">
@@ -2224,9 +2731,13 @@ function updateLegend() {
       </div>`;
     }
     if (k === 'isochrone') {
-      return `<div class="legend-item">
-        <div class="legend-swatch" style="width:28px;height:14px;background:linear-gradient(to right,#6BCB77 0%,#FFD93D 33%,#FF9F5A 66%,#FF6B35 100%);opacity:0.85"></div>
-        ${c.label}<span class="legend-sub"> 1\u00b72\u00b73\u00b74 hr</span>
+      const chips = c.contours.map((m, i) =>
+        `<span style="display:inline-flex;align-items:center;gap:4px;margin-right:8px">
+          <span class="legend-swatch" style="width:12px;background:${c.contourColors[i]}"></span>
+          <span class="legend-sub" style="margin-left:0">${m / 60}h</span>
+        </span>`).join('');
+      return `<div class="legend-item" style="flex-wrap:wrap">
+        <span style="margin-right:6px">${c.label}</span>${chips}
       </div>`;
     }
     return `<div class="legend-item"><div class="legend-swatch" style="background:${c.color};opacity:${c.opacity + 0.2}"></div>${c.label}</div>`;
@@ -2917,7 +3428,7 @@ function removeTrack(id) {
   if (S.map.getSource(`track-${id}-pins`)) S.map.removeSource(`track-${id}-pins`);
   if (S.map.getSource(`track-${id}-wpt-src`)) S.map.removeSource(`track-${id}-wpt-src`);
   S.tracks.delete(id);
-  if (S.selectedTrackId === id) { S.selectedTrackId = null; hideElevation(); }
+  if (S.selectedTrackId === id) { S.selectedTrackId = null; hideElevation(); hideTripCard(); }
   buildTracksUI();
   Store.saveTracks();
 }
@@ -2926,18 +3437,149 @@ function selectTrack(id) {
   S.selectedTrackId = id;
   buildTracksUI();
   const t = S.tracks.get(id);
-  if (t) showElevation(t);
+  if (t) showTripCard(t);
+}
+
+function deselectTrack() {
+  S.selectedTrackId = null;
+  hideTripCard();
+  hideElevation();
+  buildTracksUI();
+}
+
+// ------------------------------------------------------------
+// Sparklines — a 100x24 polyline straight from the elevation data the
+// track already carries. Costs nothing; instantly separates "real route
+// list" from "filename list".
+// ------------------------------------------------------------
+function sparklineSVG(track, height = 22, withFill = true) {
+  const s = track.stats;
+  if (!s || !s.smoothEle || s.smoothEle.length < 2 || !(s.distance > 0)) return '';
+  const N = 48;
+  const n = s.smoothEle.length;
+  const eMin = s.minEle, eMax = Math.max(s.maxEle, eMin + 1);
+  const pts = [];
+  for (let i = 0; i < N; i++) {
+    const idx = Math.min(n - 1, Math.round(i * (n - 1) / (N - 1)));
+    const x = (i / (N - 1)) * 100;
+    const y = height - 2 - ((s.smoothEle[idx] - eMin) / (eMax - eMin)) * (height - 4);
+    pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
+  }
+  const line = pts.join(' ');
+  const fill = withFill
+    ? `<polygon class="spark-fill" points="0,${height} ${line} 100,${height}" fill="${track.color}"></polygon>`
+    : '';
+  return `<svg viewBox="0 0 100 ${height}" preserveAspectRatio="none">${fill}<polyline points="${line}" stroke="${track.color}"></polyline></svg>`;
+}
+
+// ------------------------------------------------------------
+// TRIP CARD — one floating instrument panel for the selected track:
+// stats, profile toggle, trailhead weather, CAIC zone, fit.
+// ------------------------------------------------------------
+function showTripCard(track) {
+  const card = $('#trip-card');
+  if (!card) return;
+  $('#trip-dot').style.background = track.color;
+  $('#trip-name').textContent = track.name;
+  $('#trip-name').title = track.name;
+
+  const spark = sparklineSVG(track, 34);
+  $('#trip-spark').innerHTML = spark;
+  $('#trip-spark').style.display = spark ? '' : 'none';
+
+  const st = track.stats;
+  const stats = [];
+  if (st.distance > 0) stats.push({ v: fmt.dist(st.distance), l: 'mi' });
+  if (st.gain > 0) stats.push({ v: fmt.ele(st.gain), l: '\u2191 ft' });
+  if (st.loss > 0) stats.push({ v: fmt.ele(st.loss), l: '\u2193 ft' });
+  if ((st.maxEle || 0) > 0) stats.push({ v: fmt.ele(st.maxEle), l: 'max ft' });
+  if ((st.wptCount || 0) > 0) stats.push({ v: st.wptCount, l: 'pts' });
+  $('#trip-stats').innerHTML = stats.slice(0, 4).map(s =>
+    `<div class="trip-card-stat"><span class="v">${s.v}</span><span class="l">${s.l}</span></div>`).join('');
+
+  const se = startEndCoords(track);
+  const hasProfile = track.allCoords && track.allCoords.length > 1 && st.distance > 0;
+  const z = se ? caicZone(se.start[1], se.start[0]) : null;
+  const caicUrl = se
+    ? (z ? 'https://avalanche.state.co.us/forecasts/backcountry-avalanche/'
+         : `https://avalanche.org/#/current?lat=${se.start[1].toFixed(3)}&lng=${se.start[0].toFixed(3)}`)
+    : null;
+
+  const acts = [];
+  if (hasProfile) acts.push(`<button class="trip-act${S.elevTrackId === track.id ? ' on' : ''}" data-trip-act="profile">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l5-9 4 6 3-4 6 7"/></svg>Profile</button>`);
+  if (se) acts.push(`<button class="trip-act" data-trip-act="weather">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19a4.5 4.5 0 1 0-1-8.9 6 6 0 1 0-11 3.4"/><path d="M3 19h11"/></svg>Weather</button>`);
+  if (caicUrl) acts.push(`<a class="trip-act" href="${caicUrl}" target="_blank" rel="noopener" title="${z ? 'CAIC \u00b7 ' + z.pretty : 'avalanche.org'}">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 20h20L12 2z"/><path d="M12 9v5"/><circle cx="12" cy="17" r="0.5"/></svg>CAIC</a>`);
+  acts.push(`<button class="trip-act" data-trip-act="fit">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>Fit</button>`);
+  $('#trip-actions').innerHTML = acts.join('');
+
+  $('#trip-actions').querySelectorAll('[data-trip-act]').forEach(btn => {
+    btn.onclick = () => {
+      const act = btn.dataset.tripAct;
+      if (act === 'profile') {
+        if (S.elevTrackId === track.id) { hideElevation(); }
+        else { showElevation(track); }
+        showTripCard(track);  // re-render to sync the toggle + raised state
+      } else if (act === 'weather' && se) {
+        showWeatherAt(se.start[0], se.start[1]);
+      } else if (act === 'fit') {
+        fitTrack(track);
+      }
+    };
+  });
+  $('#trip-close').onclick = () => deselectTrack();
+
+  card.classList.toggle('raised', S.elevTrackId != null && $('#elevation-panel').classList.contains('show'));
+  card.classList.add('show');
+}
+
+function hideTripCard() {
+  const card = $('#trip-card');
+  if (card) card.classList.remove('show');
 }
 
 function buildTracksUI() {
   const list = $('#tracks-list');
   $('#tracks-count').textContent = S.tracks.size;
   list.innerHTML = '';
+  updateSheetPeek();
   if (!S.tracks.size) {
-    list.innerHTML = '<div class="empty-state">Drop GPX files here<br>or click <strong>Load GPX File</strong></div>';
+    list.innerHTML = `<div class="empty-state tracks-cta" id="tracks-cta">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20l5-9 4 6 3-4 6 7"/><path d="M3 20h18"/><circle cx="17" cy="6" r="1.6"/></svg>
+      <div class="cta-title">No routes yet</div>
+      <div class="cta-sub">Drag a GPX anywhere on the map,<br>or tap here to browse for one.</div>
+    </div>`;
+    const cta = $('#tracks-cta');
+    if (cta) cta.onclick = () => S.fileInput && S.fileInput.click();
     return;
   }
-  for (const t of S.tracks.values()) {
+
+  // Library tracks (pinned via manifest) read as a curated shelf;
+  // ad-hoc drops live underneath. Subheaders only when both exist.
+  const all = [...S.tracks.values()];
+  const pinned = all.filter(t => t.pinned);
+  const adhoc = all.filter(t => !t.pinned);
+  const sections = (pinned.length && adhoc.length)
+    ? [['Library', pinned], ['Dropped files', adhoc]]
+    : [[null, all]];
+
+  for (const [sectionName, sectionTracks] of sections) {
+    if (sectionName) {
+      const lbl = document.createElement('div');
+      lbl.className = 'track-section-label';
+      lbl.textContent = sectionName;
+      list.appendChild(lbl);
+    }
+    for (const t of sectionTracks) {
+      list.appendChild(buildTrackItem(t));
+    }
+  }
+}
+
+function buildTrackItem(t) {
     const el = document.createElement('div');
     el.className = 'track-item' + (S.selectedTrackId === t.id ? ' active' : '') + (t.pinned ? ' pinned' : '') + (t.visible === false ? ' hidden' : '') + (t.grouped ? ' grouped' : '');
     const wpts = t.stats.wptCount || 0;
@@ -2956,9 +3598,11 @@ function buildTracksUI() {
     const lineWidth = t.lineWidth || 3;
 
     if (t.grouped) {
+      const sparkG = sparklineSVG(t);
       el.innerHTML = `
         <div class="track-item-color" style="background:${t.color}"></div>
         <div class="track-item-name">${pinTag}${groupTag}${escapeHtml(t.name)}</div>
+        ${sparkG ? `<div class="track-spark">${sparkG}</div>` : ''}
         <div class="track-item-stats">${distStat}${gainStat}${maxStat}${featStat}</div>
         <div class="track-item-actions">
           <button class="track-act" data-act="visibility" title="Show/hide">${eyeIcon}</button>
@@ -2967,9 +3611,11 @@ function buildTracksUI() {
         </div>
       `;
     } else {
+      const spark = sparklineSVG(t);
       el.innerHTML = `
         <div class="track-item-color" data-act="color-pick" title="Change color" style="background:${t.color}"></div>
         <div class="track-item-name">${pinTag}${escapeHtml(t.name)}</div>
+        ${spark ? `<div class="track-spark">${spark}</div>` : ''}
         <div class="track-item-stats">${distStat}${gainStat}${maxStat}${wptStat}</div>
         <div class="track-item-actions">
           <button class="track-act" data-act="settings" title="Style">\u2699</button>
@@ -3010,6 +3656,8 @@ function buildTracksUI() {
         fitTrack(t);
       }
     });
+    // (selection now opens the trip card; the elevation profile is one tap
+    // away inside it instead of auto-claiming the bottom of the map)
     el.querySelectorAll('.color-swatch').forEach(b => b.addEventListener('click', (e) => {
       e.stopPropagation();
       setTrackColor(t.id, b.dataset.color);
@@ -3034,8 +3682,7 @@ function buildTracksUI() {
       });
       opSlider.addEventListener('click', (e) => e.stopPropagation());
     }
-    list.appendChild(el);
-  }
+    return el;
 }
 
 function setTrackVisible(id, visible) {
@@ -3044,7 +3691,7 @@ function setTrackVisible(id, visible) {
   t.visible = visible;
   const vis = visible ? 'visible' : 'none';
   for (const lid of t.layerIds || []) if (S.map.getLayer(lid)) S.map.setLayoutProperty(lid, 'visibility', vis);
-  if (!visible && S.selectedTrackId === id) hideElevation();
+  if (!visible && S.selectedTrackId === id) { hideElevation(); hideTripCard(); }
   buildTracksUI();
   Store.saveTracks();
 }
@@ -3228,6 +3875,8 @@ function hideElevation() {
   $('#elevation-panel').classList.remove('show');
   if (S.hoverMarker) { S.hoverMarker.remove(); S.hoverMarker = null; }
   S.elevTrackId = null;
+  const card = $('#trip-card');
+  if (card) card.classList.remove('raised');
 }
 
 // ============================================================
@@ -3381,25 +4030,177 @@ function compassFromDeg(deg) {
   return dirs[Math.round(deg / 22.5) % 16];
 }
 
-function avalancheLink(lat, lng) {
+function caicZone(lat, lng) {
   const inCO = lat >= 36.99 && lat <= 41.01 && lng >= -109.06 && lng <= -102.04;
-  if (inCO) {
-    let zone = 'front-range';
-    if (lng < -107.0 && lat > 38.7) zone = 'northern-mountains';
-    else if (lng < -107.0 && lat <= 38.7) zone = 'southern-mountains';
-    else if (lng < -106.0 && lat >= 39.0) zone = 'vail-summit';
-    else if (lng < -106.0 && lat < 39.0) zone = 'sawatch';
-    else if (lng < -105.5) zone = 'gore-tenmile';
-    else zone = 'front-range';
+  if (!inCO) return null;
+  let zone = 'front-range';
+  if (lng < -107.0 && lat > 38.7) zone = 'northern-mountains';
+  else if (lng < -107.0 && lat <= 38.7) zone = 'southern-mountains';
+  else if (lng < -106.0 && lat >= 39.0) zone = 'vail-summit';
+  else if (lng < -106.0 && lat < 39.0) zone = 'sawatch';
+  else if (lng < -105.5) zone = 'gore-tenmile';
+  return { zone, pretty: zone.split('-').join(' ') };
+}
+
+function avalancheLink(lat, lng) {
+  const z = caicZone(lat, lng);
+  if (z) {
     return {
       url: `https://avalanche.state.co.us/forecasts/backcountry-avalanche/`,
-      label: `CAIC forecast \u00b7 ${zone.replace('-', ' ')}`,
+      label: `CAIC forecast \u00b7 ${z.pretty}`,
     };
   }
   return {
     url: `https://avalanche.org/#/current?lat=${lat.toFixed(3)}&lng=${lng.toFixed(3)}`,
     label: 'Avalanche forecast (avalanche.org)',
   };
+}
+
+// ============================================================
+// CONDITIONS HERO — weather at map center + CAIC danger badge
+// ============================================================
+const COND = { lastCenter: null, weather: null, caic: null, fetching: false };
+
+// North American danger scale colors.
+const DANGER_META = {
+  low:          { color: '#50B848', label: 'LOW' },
+  moderate:     { color: '#FFF200', label: 'MOD' },
+  considerable: { color: '#F7941E', label: 'CONS' },
+  high:         { color: '#ED1C24', label: 'HIGH' },
+  extreme:      { color: '#BD0026', label: 'EXTR' },
+};
+
+// CAIC's public products feed (same one their site consumes). If this 404s or
+// blocks CORS at some point, the badge silently degrades to a plain deep link
+// — verify/adjust the endpoint if ratings never appear.
+async function fetchCaicRating(zonePretty) {
+  const dt = new Date().toISOString();
+  const url = 'https://avalanche.state.co.us/api-proxy/avid?_api_proxy_uri='
+    + encodeURIComponent(`/products/all?datetime=${dt}&includeExpired=false`);
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const products = await r.json();
+  if (!Array.isArray(products)) throw new Error('unexpected response');
+  const want = zonePretty.toLowerCase();
+  // Tolerant matching: forecast products carry zone names in title and/or
+  // areaId/forecastZones depending on API revision.
+  for (const p of products) {
+    if ((p.type || '').toLowerCase().indexOf('avalancheforecast') === -1) continue;
+    const hay = [p.title, p.areaId, ...(p.forecastZones || []).map(z => z.name || z.title || '')]
+      .filter(Boolean).join(' ').toLowerCase();
+    const tokens = want.split(' ').filter(w => w.length > 3);
+    if (!tokens.length || !tokens.every(t => hay.includes(t))) continue;
+    // Today's max rating across elevation bands.
+    const day = p.dangerRatings?.days?.[0];
+    if (!day) continue;
+    const order = ['low', 'moderate', 'considerable', 'high', 'extreme'];
+    let best = null;
+    for (const band of ['alp', 'tln', 'btl']) {
+      const v = (day[band] || '').toLowerCase();
+      if (order.includes(v) && (best === null || order.indexOf(v) > order.indexOf(best))) best = v;
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+function renderConditionsCard() {
+  const card = $('#conditions-card');
+  if (!card) return;
+  const w = COND.weather;
+  if (!w) {
+    card.innerHTML = '<div class="cond-loading">Conditions unavailable \u00b7 <a href="#" id="cond-retry" style="color:var(--accent)">retry</a></div>';
+    const retry = $('#cond-retry');
+    if (retry) retry.onclick = (e) => { e.preventDefault(); refreshConditions(true); };
+    return;
+  }
+  const [icon, label] = WMO_ICONS[w.weather_code] || ['\u2753', '\u2014'];
+  const z = COND.zone;
+  const rating = COND.caic;
+  const dm = rating ? DANGER_META[rating] : null;
+  const chipDot = dm
+    ? `<span class="caic-dot" style="background:${dm.color}"></span>`
+    : `<span class="caic-dot"></span>`;
+  const chipRating = dm
+    ? `<span class="caic-rating" style="color:${dm.color}">${dm.label}</span>`
+    : `<span class="caic-rating">VIEW \u2192</span>`;
+  const chipLabel = z ? `CAIC \u00b7 ${escapeHtml(z.pretty)}` : 'Avalanche forecast';
+  const chipUrl = z
+    ? 'https://avalanche.state.co.us/forecasts/backcountry-avalanche/'
+    : `https://avalanche.org/#/current?lat=${COND.lastCenter.lat.toFixed(3)}&lng=${COND.lastCenter.lng.toFixed(3)}`;
+
+  card.innerHTML = `
+    <div class="cond-top">
+      <div class="cond-icon">${icon}</div>
+      <div>
+        <div class="cond-temp">${fmt.temp(w.temperature_2m)}\u00b0<span style="font-size:13px;color:var(--text-dim);font-weight:500">F</span></div>
+        <div class="cond-desc">${label}</div>
+      </div>
+      <div class="cond-right">
+        <div class="cond-loc">map center</div>
+        <div class="cond-meta">${fmt.wind(w.wind_speed_10m)} mph ${compassFromDeg(w.wind_direction_10m)}</div>
+        <button class="cond-refresh" id="cond-refresh" title="Refresh conditions">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>
+        </button>
+      </div>
+    </div>
+    <a class="caic-chip" href="${chipUrl}" target="_blank" rel="noopener" title="Open the avalanche forecast">
+      ${chipDot}<span>${chipLabel}</span>${chipRating}
+    </a>
+  `;
+  $('#cond-refresh').onclick = (e) => { e.preventDefault(); refreshConditions(true); };
+  updateSheetPeek();
+}
+
+async function refreshConditions(force = false) {
+  if (COND.fetching) return;
+  const c = S.map.getCenter();
+  if (!force && COND.lastCenter) {
+    const moved = Math.hypot(c.lat - COND.lastCenter.lat, c.lng - COND.lastCenter.lng);
+    if (moved < 0.3) return;  // ~30 km: not worth a refetch
+  }
+  COND.fetching = true;
+  const btn = $('#cond-refresh');
+  if (btn) btn.classList.add('spinning');
+  COND.lastCenter = { lat: c.lat, lng: c.lng };
+  COND.zone = caicZone(c.lat, c.lng);
+  try {
+    const params = new URLSearchParams({
+      latitude: c.lat.toFixed(3), longitude: c.lng.toFixed(3),
+      current: 'temperature_2m,weather_code,wind_speed_10m,wind_direction_10m',
+      temperature_unit: 'celsius', wind_speed_unit: 'kmh', timezone: 'auto',
+    });
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    COND.weather = (await r.json()).current;
+  } catch (e) {
+    COND.weather = null;
+    console.warn('[conditions] weather fetch failed', e);
+  }
+  // Danger rating is best-effort and never blocks the card.
+  COND.caic = null;
+  renderConditionsCard();
+  if (COND.zone) {
+    try { COND.caic = await fetchCaicRating(COND.zone.pretty); }
+    catch (e) { console.warn('[conditions] CAIC rating unavailable', e.message); }
+    renderConditionsCard();
+  }
+  COND.fetching = false;
+}
+
+function updateSheetPeek() {
+  const peek = $('#sheet-peek');
+  if (!peek) return;
+  const w = COND.weather;
+  const layerCount = Object.values(S.layers).filter(Boolean).length;
+  const parts = [];
+  if (w) {
+    const [icon] = WMO_ICONS[w.weather_code] || [''];
+    parts.push(`<span>${icon}</span><span class="peek-temp">${fmt.temp(w.temperature_2m)}\u00b0</span>`);
+  }
+  parts.push(`<span class="peek-sep">\u00b7</span><span>${S.tracks.size} trk</span>`);
+  parts.push(`<span class="peek-sep">\u00b7</span><span>${layerCount} lyr</span>`);
+  peek.innerHTML = parts.join('');
 }
 
 // ============================================================
@@ -3446,10 +4247,7 @@ function wireControls() {
     $('#app').classList.toggle('sidebar-collapsed');
     setTimeout(() => S.map.resize(), 300);
   };
-  $('#sidebar-header').onclick = (e) => {
-    if (window.innerWidth > 720) return;
-    e.currentTarget.closest('#sidebar').classList.toggle('open');
-  };
+  setupBottomSheet();
 
   // Search
   const si = $('#search-input');
@@ -3518,6 +4316,8 @@ function wireControls() {
       if (S.pinMode) setPinMode(false);
       $('#weather-panel').classList.remove('show');
       if (S.weatherMarker) { S.weatherMarker.remove(); S.weatherMarker = null; }
+      if ($('#elevation-panel').classList.contains('show')) hideElevation();
+      else if ($('#trip-card').classList.contains('show')) deselectTrack();
     }
     if (e.key === 'p' || e.key === 'P') setPinMode(!S.pinMode);
     if (e.key === 'm' || e.key === 'M') setMeasureMode(!S.measure.active);
@@ -3534,6 +4334,94 @@ function wireControls() {
   });
 
   ensureMeasureLayers();
+}
+
+// ============================================================
+// BOTTOM SHEET (mobile) — pointer-driven with snap points
+// ============================================================
+// Three snap points: collapsed handle (64px peek), half, full. Drag tracks
+// the finger 1:1 (transition disabled mid-gesture); release snaps to the
+// nearest point, or skips one in the flick direction when velocity is high.
+const SHEET = { active: false, snap: 'collapsed', y: 0 };
+
+function sheetSnapY(name) {
+  const h = document.getElementById('sidebar').getBoundingClientRect().height;
+  if (name === 'full') return 0;
+  if (name === 'half') return Math.max(0, h - Math.round(window.innerHeight * 0.48));
+  return Math.max(0, h - 64);  // collapsed
+}
+
+function sheetGoTo(name, animate = true) {
+  const sb = document.getElementById('sidebar');
+  SHEET.snap = name;
+  SHEET.y = sheetSnapY(name);
+  if (!animate) sb.classList.add('dragging');
+  sb.style.transform = `translateY(${SHEET.y}px)`;
+  if (!animate) requestAnimationFrame(() => sb.classList.remove('dragging'));
+  sb.classList.toggle('at-full', name === 'full');
+}
+
+function setupBottomSheet() {
+  const header = document.getElementById('sidebar-header');
+  const sb = document.getElementById('sidebar');
+  const isMobile = () => window.innerWidth <= 720;
+
+  let startY = 0, startSheetY = 0, lastY = 0, lastT = 0, velocity = 0, moved = false, pid = null;
+
+  header.addEventListener('pointerdown', (e) => {
+    if (!isMobile()) return;
+    pid = e.pointerId;
+    header.setPointerCapture(pid);
+    startY = lastY = e.clientY;
+    lastT = performance.now();
+    startSheetY = SHEET.y || sheetSnapY(SHEET.snap);
+    velocity = 0;
+    moved = false;
+    sb.classList.add('dragging');
+  });
+
+  header.addEventListener('pointermove', (e) => {
+    if (pid === null || e.pointerId !== pid) return;
+    const dy = e.clientY - startY;
+    if (Math.abs(dy) > 4) moved = true;
+    const now = performance.now();
+    const dt = now - lastT;
+    if (dt > 0) velocity = (e.clientY - lastY) / dt;  // px per ms, + = down
+    lastY = e.clientY; lastT = now;
+    const maxY = sheetSnapY('collapsed');
+    SHEET.y = Math.min(maxY, Math.max(0, startSheetY + dy));
+    sb.style.transform = `translateY(${SHEET.y}px)`;
+  });
+
+  const finish = (e) => {
+    if (pid === null || (e && e.pointerId !== pid)) return;
+    try { header.releasePointerCapture(pid); } catch (err) {}
+    pid = null;
+    sb.classList.remove('dragging');
+    if (!moved) {
+      // Tap: collapsed <-> half
+      sheetGoTo(SHEET.snap === 'collapsed' ? 'half' : 'collapsed');
+      return;
+    }
+    const snaps = ['full', 'half', 'collapsed'];  // ascending Y
+    const ys = snaps.map(sheetSnapY);
+    let nearest = 0, best = Infinity;
+    ys.forEach((y, i) => { const d = Math.abs(SHEET.y - y); if (d < best) { best = d; nearest = i; } });
+    // Flick: |v| > 0.5 px/ms skips to the next snap in that direction.
+    if (velocity > 0.5 && nearest < snaps.length - 1) nearest++;
+    else if (velocity < -0.5 && nearest > 0) nearest--;
+    sheetGoTo(snaps[nearest]);
+  };
+  header.addEventListener('pointerup', finish);
+  header.addEventListener('pointercancel', finish);
+
+  // Keep the snap position sane through rotations / resizes.
+  window.addEventListener('resize', () => {
+    if (isMobile()) sheetGoTo(SHEET.snap, false);
+    else { sb.style.transform = ''; sb.classList.remove('at-full', 'dragging'); }
+  });
+
+  if (isMobile()) sheetGoTo('collapsed', false);
 }
 
 // ============================================================
@@ -3629,6 +4517,11 @@ function restorePersistedTracks() {
   ensurePinLayers();
   refreshPinLayer();
   restorePersistedTracks();
+  refreshConditions(true);
+  // Re-read conditions when the map settles somewhere meaningfully different
+  // (refreshConditions itself ignores moves under ~30 km).
+  const debouncedConditions = debounce(() => refreshConditions(), 2000);
+  S.map.on('moveend', debouncedConditions);
   await tryManifest();
 })();
 </script>
